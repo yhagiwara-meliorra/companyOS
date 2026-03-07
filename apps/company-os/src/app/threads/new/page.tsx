@@ -1,4 +1,5 @@
 import { createThreadAction } from "../../../server/actions/create-thread";
+import { createServerSupabaseClient } from "../../../lib/supabase/server";
 
 const defaultConstitution = `Mission
 責任ある意思決定を支援し、個人を強くする。
@@ -21,7 +22,30 @@ const threadTypes = [
   ["other", "その他"],
 ] as const;
 
-export default function NewThreadPage() {
+export default async function NewThreadPage() {
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <div className="page-stack">
+        <section className="hero-panel">
+          <div className="eyebrow">Authentication Required</div>
+          <h1 className="title">ログインしてからスレッドを作成してください</h1>
+          <p className="subtitle">
+            Company Builder OS は意思決定ログをユーザー単位で管理します。まずログイン（未登録ならアカウント作成）を行ってください。
+          </p>
+          <div className="button-row" style={{ marginTop: 20 }}>
+            <a className="button primary" href="/auth?mode=signin&next=%2Fthreads%2Fnew">ログインする</a>
+            <a className="button ghost" href="/auth?mode=signup&next=%2Fthreads%2Fnew">アカウントを作成する</a>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page-stack">
       <section className="hero-panel">

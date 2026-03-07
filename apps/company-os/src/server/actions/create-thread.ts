@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { createServerSupabaseClient } from "../../lib/supabase/server";
 import { ensureDefaultOrganization } from "../repositories/organizations.repo";
 import { createThread } from "../repositories/threads.repo";
 
@@ -22,6 +23,15 @@ const CreateThreadInputSchema = z.object({
 });
 
 export async function createThreadAction(formData: FormData) {
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/auth?mode=signin&next=%2Fthreads%2Fnew");
+  }
+
   const parsed = CreateThreadInputSchema.parse({
     title: formData.get("title"),
     threadType: formData.get("threadType"),

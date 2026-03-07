@@ -123,6 +123,11 @@ body::before {
   background: rgba(255,255,255,0.04);
 }
 
+.nav-button {
+  background: transparent;
+  cursor: pointer;
+}
+
 .page-wrap {
   max-width: 1380px;
   margin: 0 auto;
@@ -405,6 +410,14 @@ body::before {
   background: rgba(137,168,255,0.08);
   color: var(--text-soft);
   line-height: 1.7;
+}
+
+.warning {
+  color: var(--warn);
+}
+
+.success {
+  color: var(--accent-2);
 }
 
 .code-block {

@@ -1,7 +1,6 @@
 import {
   END,
   START,
-  MemorySaver,
   StateGraph,
   GraphNode,
 } from "@langchain/langgraph";
@@ -29,6 +28,7 @@ import {
 } from "./nodes/draft.schemas";
 import { afterApprovalRouter } from "./routing/after-approval.router";
 import { requestDecisionPacketReview } from "./interrupts/review.interrupt";
+import { SupabaseCheckpointer } from "./checkpoints/supabase-checkpointer";
 
 export interface StructuredStepParams<TSchema extends z.ZodTypeAny> {
   section: string;
@@ -299,7 +299,7 @@ export function createDecisionWorkflow(deps: DecisionWorkflowDeps) {
     };
   };
 
-  const checkpointer = new MemorySaver();
+  const checkpointer = new SupabaseCheckpointer();
 
   return new StateGraph({
     state: DecisionGraphState,

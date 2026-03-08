@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { StructuredStepParams } from "../../graph/decision-workflow";
 import { mockStructuredStep } from "./mock-structured-step";
+import { providerRouting } from "./providers/routing/provider-routing";
 
 /**
  * Provider adapter entrypoint.
@@ -11,14 +12,11 @@ import { mockStructuredStep } from "./mock-structured-step";
 export async function runStructuredStep<TSchema extends z.ZodTypeAny>(
   params: StructuredStepParams<TSchema>,
 ): Promise<z.infer<TSchema>> {
-  const shouldUseMock =
-    process.env.MOCK_DECISION_PACKET !== "false" ||
-    (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY);
+  const shouldUseMock = process.env.MOCK_DECISION_PACKET === "true";
 
   if (shouldUseMock) {
     return mockStructuredStep(params);
   }
 
-  // TODO: Replace with your provider router.
-  return mockStructuredStep(params);
+  return providerRouting(params);
 }

@@ -12,7 +12,9 @@ import { providerRouting } from "./providers/routing/provider-routing";
 export async function runStructuredStep<TSchema extends z.ZodTypeAny>(
   params: StructuredStepParams<TSchema>,
 ): Promise<z.infer<TSchema>> {
-  const shouldUseMock = process.env.MOCK_DECISION_PACKET === "true";
+  const shouldUseMock =
+    process.env.MOCK_DECISION_PACKET === "true" ||
+    (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY);
 
   if (shouldUseMock) {
     return mockStructuredStep(params);

@@ -112,7 +112,6 @@ export async function submitContact(
           <p style="color: #999; font-size: 13px; line-height: 1.7;">
             Meliorra株式会社<br>
             〒104-0061 東京都中央区銀座1-12-4 N&E BLD.7階<br>
-            TEL: 050-3696-1474<br>
             <a href="https://meliorra.co" style="color: #3549cb;">https://meliorra.co</a>
           </p>
           <p style="color: #bbb; font-size: 12px;">

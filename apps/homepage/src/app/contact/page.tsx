@@ -53,7 +53,6 @@ export default function ContactPage() {
           </a>
           <nav className="nav">
             <a href="/">トップページ</a>
-            <a href="tel:050-3696-1474">050-3696-1474</a>
           </nav>
         </div>
       </header>
@@ -73,11 +72,7 @@ export default function ContactPage() {
               <div className="contact-details">
                 <div className="contact-detail-item">
                   <p className="contact-detail-label">メール</p>
-                  <a href="mailto:privacy@meliorra.co">privacy@meliorra.co</a>
-                </div>
-                <div className="contact-detail-item">
-                  <p className="contact-detail-label">電話番号</p>
-                  <a href="tel:050-3696-1474">050-3696-1474</a>
+                  <a href="mailto:contact@meliorra.co">contact@meliorra.co</a>
                 </div>
                 <div className="contact-detail-item">
                   <p className="contact-detail-label">所在地</p>

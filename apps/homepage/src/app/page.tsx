@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { label: "Mission", href: "#mission" },
   { label: "事業内容", href: "#services" },
   { label: "会社概要", href: "#company" },
-  { label: "お問い合わせ", href: "#contact" },
+  { label: "お問い合わせ", href: "/contact" },
 ];
 
 function Header() {
@@ -37,7 +37,7 @@ function Header() {
               {item.label}
             </a>
           ))}
-          <a href="#contact" className="nav-cta" onClick={() => setOpen(false)}>
+          <a href="/contact" className="nav-cta" onClick={() => setOpen(false)}>
             Get in touch
           </a>
         </nav>
@@ -61,7 +61,7 @@ function Hero() {
           責任ある意思決定が最も価値を生む世界を創造します。
         </p>
         <div className="hero-actions">
-          <a href="#contact" className="btn btn-primary btn-arrow">
+          <a href="/contact" className="btn btn-primary btn-arrow">
             お問い合わせ
           </a>
           <a href="#services" className="btn btn-outline">
@@ -197,10 +197,10 @@ function ContactCTA() {
         </p>
         <div className="cta-actions">
           <a
-            href="mailto:privacy@meliorra.co"
+            href="/contact"
             className="btn btn-primary btn-arrow"
           >
-            メールで問い合わせ
+            お問い合わせフォーム
           </a>
           <a href="tel:050-3696-1474" className="btn btn-outline">
             050-3696-1474

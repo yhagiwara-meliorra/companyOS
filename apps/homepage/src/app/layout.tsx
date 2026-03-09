@@ -5,6 +5,15 @@ export const metadata: Metadata = {
   title: "Meliorra株式会社 | 責任ある進化で、未来を紡ぐ",
   description:
     "Meliorra株式会社は、AI技術を活用した意思決定支援と事業構築を通じて、責任ある進化で未来を紡ぐ企業です。",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/site.webmanifest",
   openGraph: {
     title: "Meliorra株式会社 | 責任ある進化で、未来を紡ぐ",
     description:

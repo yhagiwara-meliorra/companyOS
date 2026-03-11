@@ -1,6 +1,7 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { updateAnalysisScope } from "./actions";
 
 const ERROR_MESSAGES: Record<string, string> = {
   slack_denied: "Slack連携が拒否されました。",
@@ -9,12 +10,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   org_creation_failed: "組織の自動作成に失敗しました。",
   membership_failed: "メンバーシップの作成に失敗しました。",
   connection_failed: "Slack接続の保存に失敗しました。",
+  install_failed: "Slackインストール情報の保存に失敗しました。",
 };
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{ error?: string; success?: string; detail?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createServerClient();
@@ -24,11 +26,12 @@ export default async function SettingsPage({
 
   const { data: memberships } = await supabase
     .from("memberships")
-    .select("org_id, role, organizations(name, slug, plan)")
-    .eq("profile_id", user!.id) as { data: { org_id: string; role: string; organizations: { name: string; slug: string; plan: string } | null }[] | null };
+    .select("org_id, role, organizations(name, slug, plan, settings)")
+    .eq("profile_id", user!.id) as { data: { org_id: string; role: string; organizations: { name: string; slug: string; plan: string; settings: Record<string, unknown> } | null }[] | null };
 
   const membership = memberships?.[0];
   const org = membership?.organizations ?? null;
+  const analysisScope = (org?.settings?.analysis_scope as string) ?? "all";
 
   let slackInstalls: { installation_id: string; team_name: string; team_id: string }[] = [];
   if (membership?.org_id) {
@@ -55,7 +58,12 @@ export default async function SettingsPage({
       )}
       {params.error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {ERROR_MESSAGES[params.error] ?? `エラーが発生しました: ${params.error}`}
+          <p>{ERROR_MESSAGES[params.error] ?? `エラーが発生しました: ${params.error}`}</p>
+          {params.detail && (
+            <p className="mt-1 font-mono text-xs text-red-600">
+              詳細: {params.detail}
+            </p>
+          )}
         </div>
       )}
 
@@ -132,6 +140,58 @@ export default async function SettingsPage({
           )}
         </Card>
       </div>
+
+      {/* Analysis scope setting */}
+      {org && (
+        <Card>
+          <CardHeader>
+            <CardTitle>分析設定</CardTitle>
+          </CardHeader>
+          <form action={updateAnalysisScope} className="space-y-4">
+            <p className="text-sm text-slate-600">
+              チャンネル内のどのメッセージを分析対象にするか設定します。
+            </p>
+            <div className="space-y-2">
+              <label className="flex items-start gap-3 rounded-lg border border-border-light p-3 cursor-pointer hover:bg-slate-50">
+                <input
+                  type="radio"
+                  name="analysis_scope"
+                  value="all"
+                  defaultChecked={analysisScope === "all"}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">全員を分析</p>
+                  <p className="text-xs text-slate-500">
+                    Botが参加しているチャンネルの全メンバーのメッセージを分析します。
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 rounded-lg border border-border-light p-3 cursor-pointer hover:bg-slate-50">
+                <input
+                  type="radio"
+                  name="analysis_scope"
+                  value="members_only"
+                  defaultChecked={analysisScope === "members_only"}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">登録メンバーのみ</p>
+                  <p className="text-xs text-slate-500">
+                    Cocologにサインアップ済みのメンバーのメッセージのみ分析します（自分だけの分析に最適）。
+                  </p>
+                </div>
+              </label>
+            </div>
+            <button
+              type="submit"
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              保存
+            </button>
+          </form>
+        </Card>
+      )}
     </div>
   );
 }

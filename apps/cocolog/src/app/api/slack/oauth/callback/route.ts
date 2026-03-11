@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Upsert provider-agnostic connection
-  const { data: conn } = await db
+  const { data: conn, error: connError } = await db
     .schema("integrations")
     .from("connections")
     .upsert(
@@ -119,14 +119,16 @@ export async function GET(request: NextRequest) {
     .select("id")
     .single();
 
-  if (!conn) {
+  if (connError || !conn) {
+    console.error("Connection upsert failed:", connError);
+    const detail = encodeURIComponent(connError?.message ?? "unknown");
     return NextResponse.redirect(
-      `${appUrl}/dashboard/settings?error=connection_failed`,
+      `${appUrl}/dashboard/settings?error=connection_failed&detail=${detail}`,
     );
   }
 
   // Upsert provider-specific installation details
-  await db
+  const { error: installError } = await db
     .schema("integrations")
     .from("installations")
     .upsert(
@@ -144,7 +146,15 @@ export async function GET(request: NextRequest) {
       { onConflict: "provider_team_id" },
     );
 
-  // Audit log
+  if (installError) {
+    console.error("Installation upsert failed:", installError);
+    const detail = encodeURIComponent(installError.message);
+    return NextResponse.redirect(
+      `${appUrl}/dashboard/settings?error=install_failed&detail=${detail}`,
+    );
+  }
+
+  // Audit log (best-effort, don't fail on this)
   await db.schema("audit").from("event_log").insert({
     org_id: orgId,
     actor_id: user.id,
@@ -152,7 +162,7 @@ export async function GET(request: NextRequest) {
     resource_type: "integration",
     resource_id: conn.id,
     metadata: { team_id: oauthResult.team.id, team_name: oauthResult.team.name },
-  });
+  }).then(() => {}, (err) => console.error("Audit log failed:", err));
 
   return NextResponse.redirect(
     `${appUrl}/dashboard/settings?success=slack_connected`,

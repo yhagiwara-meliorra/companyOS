@@ -60,6 +60,45 @@ export async function processMessageEvent(
       return;
     }
 
+    // Check org-level analysis scope setting
+    const { data: orgRow } = await db
+      .from("organizations")
+      .select("settings")
+      .eq("id", orgId)
+      .single();
+
+    const analysisScope =
+      (orgRow?.settings as Record<string, unknown> | null)?.analysis_scope ?? "all";
+
+    if (analysisScope === "members_only") {
+      // Only analyze messages from Slack users whose email matches an org member.
+      // Approach: get all member profile_ids → look up each auth user → compare emails.
+      const slackEmail = userInfo.user.profile.email?.toLowerCase();
+      if (!slackEmail) {
+        await updateStatus(db, ctx.webhookEventId, "skipped", "no email for sender (members_only mode)");
+        return;
+      }
+
+      const { data: members } = await db
+        .from("memberships")
+        .select("profile_id")
+        .eq("org_id", orgId);
+
+      let isMember = false;
+      for (const m of members ?? []) {
+        const { data: authData } = await db.auth.admin.getUserById(m.profile_id);
+        if (authData?.user?.email?.toLowerCase() === slackEmail) {
+          isMember = true;
+          break;
+        }
+      }
+
+      if (!isMember) {
+        await updateStatus(db, ctx.webhookEventId, "skipped", "sender not an org member (members_only mode)");
+        return;
+      }
+    }
+
     const { data: extUser } = await db
       .schema("integrations")
       .from("external_users")

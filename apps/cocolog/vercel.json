@@ -5,6 +5,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/weekly-rollup",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/analyze-pending",
       "schedule": "*/15 * * * *"
     },

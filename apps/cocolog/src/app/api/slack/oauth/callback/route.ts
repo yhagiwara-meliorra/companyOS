@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Get current user's org
+  // Get current user
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -53,20 +53,55 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`);
   }
 
-  const { data: membership } = await supabase
+  // Store connection + installation using admin client (bypasses RLS)
+  const db = createAdminClient();
+
+  // Check existing membership; auto-create org if none exists
+  const { data: existingMembership } = await db
     .from("memberships")
     .select("org_id")
     .eq("profile_id", user.id)
-    .single() as { data: { org_id: string } | null };
+    .limit(1)
+    .single();
 
-  if (!membership) {
-    return NextResponse.redirect(
-      `${appUrl}/dashboard/settings?error=no_org`,
-    );
+  let orgId: string;
+
+  if (existingMembership) {
+    orgId = existingMembership.org_id;
+  } else {
+    // Auto-create organization from Slack team info
+    const teamName = oauthResult.team!.name ?? "My Organization";
+    const slug =
+      teamName
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || `org-${Date.now()}`;
+
+    const { data: newOrg, error: orgError } = await db
+      .from("organizations")
+      .insert({ name: teamName, slug: `${slug}-${Date.now()}` })
+      .select("id")
+      .single();
+
+    if (orgError || !newOrg) {
+      return NextResponse.redirect(
+        `${appUrl}/dashboard/settings?error=org_creation_failed`,
+      );
+    }
+
+    // Create owner membership
+    const { error: memError } = await db
+      .from("memberships")
+      .insert({ org_id: newOrg.id, profile_id: user.id, role: "owner" });
+
+    if (memError) {
+      return NextResponse.redirect(
+        `${appUrl}/dashboard/settings?error=membership_failed`,
+      );
+    }
+
+    orgId = newOrg.id;
   }
-
-  // Store connection + installation using admin client (bypasses RLS)
-  const db = createAdminClient();
 
   // Upsert provider-agnostic connection
   const { data: conn } = await db
@@ -74,7 +109,7 @@ export async function GET(request: NextRequest) {
     .from("connections")
     .upsert(
       {
-        org_id: membership.org_id,
+        org_id: orgId,
         provider: "slack",
         status: "active",
         installed_by: user.id,
@@ -111,7 +146,7 @@ export async function GET(request: NextRequest) {
 
   // Audit log
   await db.schema("audit").from("event_log").insert({
-    org_id: membership.org_id,
+    org_id: orgId,
     actor_id: user.id,
     action: "slack.installed",
     resource_type: "integration",

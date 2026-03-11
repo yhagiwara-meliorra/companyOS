@@ -2,7 +2,21 @@ import { createServerClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export default async function SettingsPage() {
+const ERROR_MESSAGES: Record<string, string> = {
+  slack_denied: "Slack連携が拒否されました。",
+  slack_token_failed: "Slackトークンの取得に失敗しました。",
+  no_org: "組織が見つかりません。先に組織を作成してください。",
+  org_creation_failed: "組織の自動作成に失敗しました。",
+  membership_failed: "メンバーシップの作成に失敗しました。",
+  connection_failed: "Slack接続の保存に失敗しました。",
+};
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; success?: string }>;
+}) {
+  const params = await searchParams;
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -33,6 +47,17 @@ export default async function SettingsPage() {
           組織と連携の管理。
         </p>
       </div>
+
+      {params.success === "slack_connected" && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Slackワークスペースが正常に接続されました。
+        </div>
+      )}
+      {params.error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {ERROR_MESSAGES[params.error] ?? `エラーが発生しました: ${params.error}`}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

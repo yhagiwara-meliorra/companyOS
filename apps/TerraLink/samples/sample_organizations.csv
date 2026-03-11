@@ -1,0 +1,6 @@
+org_name,country,verification_status
+"Acme Manufacturing Co.","JP","declared"
+"Green Valley Farms","TH","verified"
+"Pacific Timber Ltd.","ID","inferred"
+"Nordic Minerals AB","SE","declared"
+"Amazon Rubber Ltda.","BR","inferred"

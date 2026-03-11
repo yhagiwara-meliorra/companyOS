@@ -1,0 +1,7 @@
+site_name,latitude,longitude,country,site_type,verification_status
+"Tokyo Head Office",35.6812,139.7671,"JP","office","declared"
+"Chiang Mai Farm",18.7883,98.9853,"TH","farm","verified"
+"Kalimantan Plantation",-1.6817,116.0418,"ID","plantation","inferred"
+"Stockholm Lab",59.3293,18.0686,"SE","laboratory","declared"
+"Manaus Processing",-3.1190,-60.0217,"BR","factory","inferred"
+"Osaka Factory",34.6937,135.5023,"JP","factory","declared"

@@ -1,0 +1,5 @@
+buyer_org_name,supplier_org_name,tier_depth,relationship_type,verification_status
+"Acme Manufacturing Co.","Green Valley Farms",1,"direct","declared"
+"Acme Manufacturing Co.","Pacific Timber Ltd.",1,"direct","inferred"
+"Acme Manufacturing Co.","Nordic Minerals AB",2,"indirect","inferred"
+"Green Valley Farms","Amazon Rubber Ltda.",2,"indirect","inferred"

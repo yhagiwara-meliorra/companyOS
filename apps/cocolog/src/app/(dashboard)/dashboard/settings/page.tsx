@@ -79,10 +79,6 @@ export default async function SettingsPage({
                 <dd className="font-medium text-slate-900">{org.name}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-slate-500">スラッグ</dt>
-                <dd className="font-mono text-slate-600">{org.slug}</dd>
-              </div>
-              <div className="flex justify-between">
                 <dt className="text-slate-500">プラン</dt>
                 <dd>
                   <Badge variant="primary">{org.plan}</Badge>

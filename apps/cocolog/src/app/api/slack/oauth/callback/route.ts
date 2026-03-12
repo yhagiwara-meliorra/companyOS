@@ -132,6 +132,8 @@ export async function GET(request: NextRequest) {
   }
 
   // Upsert provider-specific installation details
+  // Note: revoked_at must be explicitly set to null so that re-installs
+  // after a disconnect clear the previous revocation timestamp.
   const { error: installError } = await db
     .schema("integrations")
     .from("installations")
@@ -146,6 +148,7 @@ export async function GET(request: NextRequest) {
         token_type: oauthResult.token_type ?? "bot",
         raw_response: JSON.parse(JSON.stringify(oauthResult)),
         installed_at: new Date().toISOString(),
+        revoked_at: null,
       },
       { onConflict: "provider_team_id" },
     );

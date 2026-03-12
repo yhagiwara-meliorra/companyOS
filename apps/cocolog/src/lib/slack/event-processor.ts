@@ -51,20 +51,26 @@ export async function processMessageEvent(
     const orgId = connection.org_id;
     const slack = new SlackClient(installation.bot_token);
 
-    // Upsert external_user
-    let userInfo;
+    // Fetch user info (non-fatal — continue with fallback if user_not_found)
+    let userInfo: {
+      user: {
+        id: string;
+        name: string;
+        real_name: string;
+        profile: { email?: string; image_72?: string };
+      };
+    } | null = null;
     try {
       userInfo = await slack.getUserInfo(event.user);
     } catch (userErr) {
       const errMsg = userErr instanceof Error ? userErr.message : String(userErr);
-      console.error("[event-processor] failed to fetch user info:", {
+      console.warn("[event-processor] users.info failed (non-fatal):", {
         user: event.user,
         teamId: ctx.teamId,
         error: errMsg,
-        botTokenLength: installation.bot_token?.length ?? 0,
       });
-      await updateStatus(db, ctx.webhookEventId, "failed", `failed to fetch user info: ${errMsg}`);
-      return;
+      // user_not_found: external user, deactivated, or Slack Connect guest
+      // Continue processing with fallback name — message still gets classified.
     }
 
     // Check org-level analysis scope setting
@@ -80,10 +86,18 @@ export async function processMessageEvent(
 
     if (analysisScope === "members_only") {
       // Only analyze messages from Slack users whose email matches an org member.
-      // Approach: get all member profile_ids → look up each auth user → compare emails.
-      const slackEmail = userInfo.user.profile.email?.toLowerCase();
+      const slackEmail = userInfo?.user.profile.email?.toLowerCase();
       if (!slackEmail) {
-        await updateStatus(db, ctx.webhookEventId, "skipped", "no email for sender (members_only mode)");
+        // No email available — either users.info failed or user has no email.
+        // In members_only mode, skip if we can't verify membership.
+        await updateStatus(
+          db,
+          ctx.webhookEventId,
+          "skipped",
+          userInfo
+            ? "no email for sender (members_only mode)"
+            : "users.info failed, cannot verify membership (members_only mode)",
+        );
         return;
       }
 
@@ -107,6 +121,12 @@ export async function processMessageEvent(
       }
     }
 
+    // Fallback display name when users.info failed
+    const displayName = userInfo
+      ? userInfo.user.real_name || userInfo.user.name
+      : `user-${event.user}`;
+    const avatarUrl = userInfo?.user.profile.image_72 ?? null;
+
     const { data: extUser } = await db
       .schema("integrations")
       .from("external_users")
@@ -114,9 +134,11 @@ export async function processMessageEvent(
         {
           connection_id: connectionId,
           provider_user_id: event.user,
-          display_name: userInfo.user.real_name || userInfo.user.name,
-          avatar_url: userInfo.user.profile.image_72 ?? null,
-          raw_profile: JSON.parse(JSON.stringify(userInfo.user)),
+          display_name: displayName,
+          avatar_url: avatarUrl,
+          raw_profile: userInfo
+            ? JSON.parse(JSON.stringify(userInfo.user))
+            : { id: event.user, fallback: true },
           last_seen_at: new Date().toISOString(),
         },
         { onConflict: "connection_id,provider_user_id" },
@@ -158,8 +180,8 @@ export async function processMessageEvent(
         .from("people")
         .insert({
           org_id: orgId,
-          display_name: userInfo.user.real_name || userInfo.user.name,
-          email: userInfo.user.profile.email ?? null,
+          display_name: displayName,
+          email: userInfo?.user.profile.email ?? null,
         })
         .select("id")
         .single();
@@ -172,8 +194,8 @@ export async function processMessageEvent(
           provider_user_id: event.user,
           provider_team_id: ctx.teamId,
           provider_metadata: {
-            name: userInfo.user.name,
-            avatar: userInfo.user.profile.image_72,
+            name: userInfo?.user.name ?? event.user,
+            avatar: userInfo?.user.profile.image_72 ?? null,
           },
         });
       }

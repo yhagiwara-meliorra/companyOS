@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { disconnectSlack } from "./actions";
 
 interface DisconnectButtonProps {
@@ -11,14 +12,14 @@ interface DisconnectButtonProps {
 export function DisconnectButton({ installationId, teamName }: DisconnectButtonProps) {
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   async function handleDisconnect() {
     setLoading(true);
     const formData = new FormData();
     formData.set("installation_id", installationId);
     await disconnectSlack(formData);
-    setLoading(false);
-    setConfirming(false);
+    router.refresh();
   }
 
   if (confirming) {

@@ -41,7 +41,8 @@ export default async function SettingsPage({
     const { data } = await supabase
       .from("v_my_installations")
       .select("installation_id, team_name, team_id")
-      .eq("org_id", membership.org_id) as { data: { installation_id: string; team_name: string; team_id: string }[] | null };
+      .eq("org_id", membership.org_id)
+      .eq("status", "active") as { data: { installation_id: string; team_name: string; team_id: string }[] | null };
     slackInstalls = data ?? [];
   }
 

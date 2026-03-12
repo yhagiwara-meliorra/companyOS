@@ -39,12 +39,16 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/auth");
 
-  if (!user && !isAuthRoute) {
+  // /invite pages are accessible to both logged-in and logged-out users
+  const isInviteRoute = request.nextUrl.pathname.startsWith("/invite");
+
+  if (!user && !isAuthRoute && !isInviteRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
+  // Only redirect logged-in users away from auth routes (not invite routes)
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

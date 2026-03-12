@@ -74,8 +74,9 @@ export async function processMessageEvent(
       .eq("id", orgId)
       .single();
 
+    // Default to "members_only" — owner is included in memberships (no role filter).
     const analysisScope =
-      (orgRow?.settings as Record<string, unknown> | null)?.analysis_scope ?? "all";
+      (orgRow?.settings as Record<string, unknown> | null)?.analysis_scope ?? "members_only";
 
     if (analysisScope === "members_only") {
       // Only analyze messages from Slack users whose email matches an org member.

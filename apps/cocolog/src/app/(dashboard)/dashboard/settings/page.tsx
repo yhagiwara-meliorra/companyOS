@@ -1,7 +1,8 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { updateAnalysisScope } from "./actions";
+import { DisconnectButton } from "./disconnect-button";
+import { AnalysisScopeSetting } from "./analysis-scope-setting";
 
 const ERROR_MESSAGES: Record<string, string> = {
   slack_denied: "Slack連携が拒否されました。",
@@ -31,7 +32,9 @@ export default async function SettingsPage({
 
   const membership = memberships?.[0];
   const org = membership?.organizations ?? null;
-  const analysisScope = (org?.settings?.analysis_scope as string) ?? "all";
+  const analysisScope = (org?.settings?.analysis_scope as string) ?? "members_only";
+  const isOwnerOrAdmin =
+    membership?.role === "owner" || membership?.role === "admin";
 
   let slackInstalls: { installation_id: string; team_name: string; team_id: string }[] = [];
   if (membership?.org_id) {
@@ -103,24 +106,40 @@ export default async function SettingsPage({
             <CardTitle>Slack連携</CardTitle>
           </CardHeader>
           {slackInstalls.length > 0 ? (
-            <ul className="space-y-3">
-              {slackInstalls.map((install) => (
-                <li
-                  key={install.installation_id}
-                  className="flex items-center justify-between rounded-lg border border-border-light px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">
-                      {install.team_name}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      チームID: {install.team_id}
-                    </p>
-                  </div>
-                  <Badge variant="success">接続済み</Badge>
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-3">
+              <ul className="space-y-3">
+                {slackInstalls.map((install) => (
+                  <li
+                    key={install.installation_id}
+                    className="flex items-center justify-between rounded-lg border border-border-light px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">
+                        {install.team_name}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        チームID: {install.team_id}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="success">接続済み</Badge>
+                      {isOwnerOrAdmin && (
+                        <DisconnectButton
+                          installationId={install.installation_id}
+                          teamName={install.team_name}
+                        />
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <a
+                href="/api/slack/oauth/start"
+                className="inline-block rounded-lg border border-border-light px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                再接続
+              </a>
+            </div>
           ) : (
             <div className="text-center">
               <p className="text-sm text-slate-400">
@@ -143,49 +162,7 @@ export default async function SettingsPage({
           <CardHeader>
             <CardTitle>分析設定</CardTitle>
           </CardHeader>
-          <form action={updateAnalysisScope} className="space-y-4">
-            <p className="text-sm text-slate-600">
-              チャンネル内のどのメッセージを分析対象にするか設定します。
-            </p>
-            <div className="space-y-2">
-              <label className="flex items-start gap-3 rounded-lg border border-border-light p-3 cursor-pointer hover:bg-slate-50">
-                <input
-                  type="radio"
-                  name="analysis_scope"
-                  value="all"
-                  defaultChecked={analysisScope === "all"}
-                  className="mt-0.5"
-                />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">全員を分析</p>
-                  <p className="text-xs text-slate-500">
-                    Botが参加しているチャンネルの全メンバーのメッセージを分析します。
-                  </p>
-                </div>
-              </label>
-              <label className="flex items-start gap-3 rounded-lg border border-border-light p-3 cursor-pointer hover:bg-slate-50">
-                <input
-                  type="radio"
-                  name="analysis_scope"
-                  value="members_only"
-                  defaultChecked={analysisScope === "members_only"}
-                  className="mt-0.5"
-                />
-                <div>
-                  <p className="text-sm font-medium text-slate-900">登録メンバーのみ</p>
-                  <p className="text-xs text-slate-500">
-                    Cocologにサインアップ済みのメンバーのメッセージのみ分析します（自分だけの分析に最適）。
-                  </p>
-                </div>
-              </label>
-            </div>
-            <button
-              type="submit"
-              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
-            >
-              保存
-            </button>
-          </form>
+          <AnalysisScopeSetting currentScope={analysisScope} />
         </Card>
       )}
     </div>

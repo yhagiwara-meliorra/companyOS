@@ -79,7 +79,11 @@ export async function GET(request: NextRequest) {
 
     const { data: newOrg, error: orgError } = await db
       .from("organizations")
-      .insert({ name: teamName, slug: `${slug}-${Date.now()}` })
+      .insert({
+        name: teamName,
+        slug: `${slug}-${Date.now()}`,
+        settings: { analysis_scope: "members_only" },
+      })
       .select("id")
       .single();
 

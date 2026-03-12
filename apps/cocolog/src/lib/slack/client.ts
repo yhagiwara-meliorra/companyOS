@@ -55,4 +55,17 @@ export class SlackClient {
       };
     }>("users.info", { user: userId });
   }
+
+  async getChannelInfo(channelId: string) {
+    return this.apiCall<{
+      channel: {
+        id: string;
+        name: string;
+        is_channel: boolean;
+        is_group: boolean;
+        is_im: boolean;
+        is_mpim: boolean;
+      };
+    }>("conversations.info", { channel: channelId });
+  }
 }

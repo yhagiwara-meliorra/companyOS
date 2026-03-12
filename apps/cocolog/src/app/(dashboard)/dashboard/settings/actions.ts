@@ -41,6 +41,25 @@ export async function updateAnalysisScope(formData: FormData) {
   revalidatePath("/dashboard/settings");
 }
 
+export async function updateTimezone(formData: FormData) {
+  const timezone = formData.get("timezone") as string;
+  if (!timezone) return;
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from("user_settings")
+    .update({ timezone })
+    .eq("profile_id", user.id);
+
+  revalidatePath("/dashboard/settings");
+}
+
 export async function disconnectSlack(formData: FormData) {
   const installationId = formData.get("installation_id") as string;
   if (!installationId) return;

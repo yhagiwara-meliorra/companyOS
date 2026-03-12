@@ -146,6 +146,20 @@ export async function processMessageEvent(
       .select("id")
       .single();
 
+    // Resolve channel name via Slack API (non-fatal)
+    let channelName = event.channel; // fallback to channel ID
+    try {
+      const channelInfo = await slack.getChannelInfo(event.channel);
+      channelName = channelInfo.channel.name;
+    } catch (chanErr) {
+      const errMsg = chanErr instanceof Error ? chanErr.message : String(chanErr);
+      console.warn("[event-processor] conversations.info failed (non-fatal):", {
+        channel: event.channel,
+        error: errMsg,
+      });
+      // DMs / MPIMs may not have a name — fallback to channel ID is fine.
+    }
+
     // Upsert external_channel
     const { data: extChannel } = await db
       .schema("integrations")
@@ -154,7 +168,7 @@ export async function processMessageEvent(
         {
           connection_id: connectionId,
           provider_channel_id: event.channel,
-          channel_name: event.channel,
+          channel_name: channelName,
           channel_type: event.channel_type ?? "channel",
         },
         { onConflict: "connection_id,provider_channel_id" },

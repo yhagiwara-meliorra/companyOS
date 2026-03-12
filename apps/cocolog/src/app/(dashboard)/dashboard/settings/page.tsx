@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DisconnectButton } from "./disconnect-button";
 import { AnalysisScopeSetting } from "./analysis-scope-setting";
+import { TimezoneSetting } from "./timezone-setting";
 
 const ERROR_MESSAGES: Record<string, string> = {
   slack_denied: "Slack連携が拒否されました。",
@@ -35,6 +36,15 @@ export default async function SettingsPage({
   const analysisScope = (org?.settings?.analysis_scope as string) ?? "members_only";
   const isOwnerOrAdmin =
     membership?.role === "owner" || membership?.role === "admin";
+
+  // Fetch user timezone setting
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: userSettings } = (await (supabase as any)
+    .from("user_settings")
+    .select("timezone")
+    .eq("profile_id", user!.id)
+    .single()) as { data: { timezone: string } | null };
+  const currentTimezone = userSettings?.timezone ?? "UTC";
 
   let slackInstalls: { installation_id: string; team_name: string; team_id: string }[] = [];
   if (membership?.org_id) {
@@ -166,6 +176,14 @@ export default async function SettingsPage({
           <AnalysisScopeSetting currentScope={analysisScope} />
         </Card>
       )}
+
+      {/* Timezone setting */}
+      <Card>
+        <CardHeader>
+          <CardTitle>タイムゾーン</CardTitle>
+        </CardHeader>
+        <TimezoneSetting currentTimezone={currentTimezone} />
+      </Card>
     </div>
   );
 }

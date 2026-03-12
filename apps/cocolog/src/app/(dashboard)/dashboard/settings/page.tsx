@@ -5,6 +5,7 @@ import { DisconnectButton } from "./disconnect-button";
 import { AnalysisScopeSetting } from "./analysis-scope-setting";
 import { TimezoneSetting } from "./timezone-setting";
 import { ContentStorageSetting } from "./content-storage-setting";
+import { RefreshNamesButton } from "./refresh-names-button";
 
 const ERROR_MESSAGES: Record<string, string> = {
   slack_denied: "Slack連携が拒否されました。",
@@ -146,12 +147,15 @@ export default async function SettingsPage({
                   </li>
                 ))}
               </ul>
-              <a
-                href="/api/slack/oauth/start"
-                className="inline-block rounded-lg border border-border-light px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-              >
-                再接続
-              </a>
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  href="/api/slack/oauth/start"
+                  className="inline-block rounded-lg border border-border-light px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  再接続
+                </a>
+                {isOwnerOrAdmin && <RefreshNamesButton />}
+              </div>
             </div>
           ) : (
             <div className="text-center">

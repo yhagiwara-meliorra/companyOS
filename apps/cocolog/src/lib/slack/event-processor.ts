@@ -50,6 +50,7 @@ export async function processMessageEvent(
     const connectionId = connection.id;
     const orgId = connection.org_id;
     const slack = new SlackClient(installation.bot_token);
+    const warnings: string[] = [];
 
     // Fetch user info (non-fatal — continue with fallback if user_not_found)
     let userInfo: {
@@ -64,13 +65,12 @@ export async function processMessageEvent(
       userInfo = await slack.getUserInfo(event.user);
     } catch (userErr) {
       const errMsg = userErr instanceof Error ? userErr.message : String(userErr);
+      warnings.push(`users.info failed for ${event.user}: ${errMsg}`);
       console.warn("[event-processor] users.info failed (non-fatal):", {
         user: event.user,
         teamId: ctx.teamId,
         error: errMsg,
       });
-      // user_not_found: external user, deactivated, or Slack Connect guest
-      // Continue processing with fallback name — message still gets classified.
     }
 
     // Check org-level analysis scope setting
@@ -154,6 +154,7 @@ export async function processMessageEvent(
       channelName = channelInfo.channel.name;
     } catch (chanErr) {
       const errMsg = chanErr instanceof Error ? chanErr.message : String(chanErr);
+      warnings.push(`conversations.info failed for ${event.channel}: ${errMsg}`);
       console.warn("[event-processor] conversations.info failed (non-fatal):", {
         channel: event.channel,
         error: errMsg,
@@ -265,8 +266,13 @@ export async function processMessageEvent(
       }
     }
 
-    // Mark as processed
-    await updateStatus(db, ctx.webhookEventId, "processed");
+    // Mark as processed (include warnings if any API calls failed)
+    await updateStatus(
+      db,
+      ctx.webhookEventId,
+      "processed",
+      warnings.length > 0 ? warnings.join("; ") : undefined,
+    );
   } catch (err) {
     await updateStatus(
       db,

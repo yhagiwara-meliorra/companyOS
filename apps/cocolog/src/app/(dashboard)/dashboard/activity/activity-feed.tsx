@@ -104,13 +104,7 @@ export function ActivityFeed() {
 
   useEffect(() => {
     fetchData();
-    // Auto-refresh only when viewing today
-    const isToday = selectedDate === getLocalToday();
-    if (isToday) {
-      const interval = setInterval(fetchData, 30_000);
-      return () => clearInterval(interval);
-    }
-  }, [fetchData, selectedDate]);
+  }, [fetchData]);
 
   // Reset to page 1 when date changes
   function handleDateChange(newDate: string) {
@@ -185,12 +179,33 @@ export function ActivityFeed() {
           </button>
         )}
 
-        <span className="ml-auto text-xs text-slate-400">
-          {totalCount > 0
-            ? `${totalCount}件のメッセージ`
-            : ""}
-          {isToday && " · 30秒ごとに自動更新"}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-slate-400">
+            {totalCount > 0 ? `${totalCount}件のメッセージ` : ""}
+          </span>
+          <button
+            type="button"
+            onClick={fetchData}
+            disabled={loading}
+            className="inline-flex items-center gap-1 rounded-md border border-border-light px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="更新"
+          >
+            <svg
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            更新
+          </button>
+        </div>
       </div>
 
       {loading ? (

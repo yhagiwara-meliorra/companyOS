@@ -2,7 +2,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { WeeklyTrendChart, SIGNAL_COLORS } from "@/components/charts/weekly-trend-chart";
 import { SignalBar } from "@/components/charts/signal-bar";
-import { MemberAnalytics } from "./member-analytics";
+import { AnalyticsTabs } from "./analytics-tabs";
+import { ToneAnalytics } from "./tone-analytics";
 
 export default async function AnalyticsPage() {
   const supabase = await createServerClient();
@@ -23,7 +24,7 @@ export default async function AnalyticsPage() {
   if (!orgId) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-slate-900">組織分析</h1>
+        <h1 className="text-2xl font-bold text-slate-900">分析</h1>
         <Card>
           <p className="py-8 text-center text-sm text-slate-400">
             組織に所属していません。
@@ -94,7 +95,7 @@ export default async function AnalyticsPage() {
     return point;
   });
 
-  // Activity trend data (messages & active people over time)
+  // Activity trend data
   const activityData = weeklyData.map((row) => ({
     week: new Date(row.week_start).toLocaleDateString("ja-JP", {
       month: "short",
@@ -120,23 +121,14 @@ export default async function AnalyticsPage() {
     }
   }
 
-  // Sort by message count descending
   latestPersonRows.sort((a, b) => b.message_count - a.message_count);
 
-  // Overall latest org metrics for signal bar
   const latestOrg = weeklyData[weeklyData.length - 1];
   const prevOrg = weeklyData.length >= 2 ? weeklyData[weeklyData.length - 2] : null;
 
-  return (
+  // ── Org Analytics content (server-rendered) ──
+  const orgContent = (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">組織分析</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          {orgName}のコミュニケーションシグナル分析。
-        </p>
-      </div>
-
-      {/* Org signal trend */}
       <Card>
         <CardHeader>
           <CardTitle>組織シグナルトレンド（最大12週）</CardTitle>
@@ -151,7 +143,6 @@ export default async function AnalyticsPage() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Latest org signal scores */}
         <Card>
           <CardHeader>
             <CardTitle>最新週の組織スコア</CardTitle>
@@ -179,7 +170,6 @@ export default async function AnalyticsPage() {
           )}
         </Card>
 
-        {/* Activity summary */}
         <Card>
           <CardHeader>
             <CardTitle>アクティビティサマリー</CardTitle>
@@ -239,7 +229,6 @@ export default async function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Per-person breakdown */}
       <Card>
         <CardHeader>
           <CardTitle>メンバー別スコア（最新週）</CardTitle>
@@ -305,14 +294,22 @@ export default async function AnalyticsPage() {
           </p>
         )}
       </Card>
+    </div>
+  );
 
-      {/* Per-member tone/politeness trends + scene distribution */}
+  // ── Tone Analytics content (client-rendered) ──
+  const toneContent = <ToneAnalytics />;
+
+  return (
+    <div className="space-y-6">
       <div>
-        <h2 className="mb-4 text-lg font-bold text-slate-900">
-          メンバー別 トーン・丁寧さ推移 &amp; コメント分類
-        </h2>
-        <MemberAnalytics />
+        <h1 className="text-2xl font-bold text-slate-900">分析</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {orgName}のコミュニケーション分析。
+        </p>
       </div>
+
+      <AnalyticsTabs orgContent={orgContent} toneContent={toneContent} />
     </div>
   );
 }

@@ -4,10 +4,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 
+const PAGE_SIZE = 50;
+
 /**
  * GET /api/activity/recent
- * Returns today's message analyses for the current user's org.
- * "Today" is calculated in the user's timezone (via ?tz= param).
+ * Returns message analyses for a given date (default: today).
+ *
+ * Query params:
+ *   tz    — IANA timezone (default: UTC)
+ *   date  — YYYY-MM-DD in user's timezone (default: today)
+ *   page  — 1-based page number (default: 1)
  */
 export async function GET(request: Request) {
   const supabase = await createServerClient();
@@ -21,6 +27,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const userTimezone = searchParams.get("tz") || "UTC";
+  const dateParam = searchParams.get("date"); // YYYY-MM-DD or null (= today)
+  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
 
   const { data: membership } = await supabase
     .from("memberships")
@@ -29,15 +37,56 @@ export async function GET(request: Request) {
     .single() as { data: { org_id: string } | null };
 
   if (!membership) {
-    return NextResponse.json({ items: [], hourly: [], todayLabel: "" });
+    return NextResponse.json({ items: [], hourly: [], dateLabel: "", totalCount: 0, page: 1, pageSize: PAGE_SIZE });
   }
 
   const db = createAdminClient();
 
-  // Calculate today's boundaries in the user's timezone
-  const { todayStart, todayEnd, todayLabel } = getTodayBounds(userTimezone);
+  // Calculate day boundaries
+  const { dayStart, dayEnd, dateLabel } = dateParam
+    ? getDateBounds(dateParam, userTimezone)
+    : getTodayBounds(userTimezone);
 
-  // Fetch today's message_refs (content column added in migration 00005)
+  // ── Count total items for the day ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { count: totalCount } = (await (db as any)
+    .schema("integrations")
+    .from("message_refs")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", membership.org_id)
+    .gte("sent_at", dayStart.toISOString())
+    .lt("sent_at", dayEnd.toISOString())) as { count: number | null };
+
+  // ── Fetch ALL refs for the day (for hourly chart) — only ids + sent_at ──
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: allRefs } = (await (db as any)
+    .schema("integrations")
+    .from("message_refs")
+    .select("sent_at")
+    .eq("org_id", membership.org_id)
+    .gte("sent_at", dayStart.toISOString())
+    .lt("sent_at", dayEnd.toISOString())) as { data: { sent_at: string }[] | null };
+
+  // Build hourly distribution from ALL messages
+  const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
+  for (const ref of allRefs ?? []) {
+    let hour: number;
+    try {
+      const formatted = new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: userTimezone,
+      }).format(new Date(ref.sent_at));
+      hour = parseInt(formatted, 10) % 24;
+    } catch {
+      hour = new Date(ref.sent_at).getUTCHours();
+    }
+    hourly[hour].count++;
+  }
+
+  // ── Fetch paginated message_refs ──
+  const offset = (page - 1) * PAGE_SIZE;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: refs } = (await (db as any)
     .schema("integrations")
@@ -46,10 +95,10 @@ export async function GET(request: Request) {
       "id, person_id, provider_channel_id, sent_at, channel_ref_id, sender_ref_id, permalink, content",
     )
     .eq("org_id", membership.org_id)
-    .gte("sent_at", todayStart.toISOString())
-    .lt("sent_at", todayEnd.toISOString())
+    .gte("sent_at", dayStart.toISOString())
+    .lt("sent_at", dayEnd.toISOString())
     .order("sent_at", { ascending: false })
-    .limit(200)) as {
+    .range(offset, offset + PAGE_SIZE - 1)) as {
     data: {
       id: string;
       person_id: string | null;
@@ -63,10 +112,17 @@ export async function GET(request: Request) {
   };
 
   if (!refs || refs.length === 0) {
-    return NextResponse.json({ items: [], hourly: [], todayLabel });
+    return NextResponse.json({
+      items: [],
+      hourly,
+      dateLabel,
+      totalCount: totalCount ?? 0,
+      page,
+      pageSize: PAGE_SIZE,
+    });
   }
 
-  // Fetch analyses for these message_refs
+  // Fetch analyses
   const refIds = refs.map((r) => r.id);
   const { data: analyses } = await db
     .schema("ai")
@@ -130,68 +186,84 @@ export async function GET(request: Request) {
     };
   });
 
-  // Build hourly distribution (today) in user's timezone
-  const hourly = Array.from({ length: 24 }, (_, i) => ({
-    hour: i,
-    count: 0,
-  }));
-  for (const ref of refs) {
-    let hour: number;
-    try {
-      const formatted = new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: userTimezone,
-      }).format(new Date(ref.sent_at));
-      hour = parseInt(formatted, 10) % 24;
-    } catch {
-      hour = new Date(ref.sent_at).getUTCHours();
-    }
-    hourly[hour].count++;
-  }
-
-  return NextResponse.json({ items, hourly, todayLabel });
+  return NextResponse.json({
+    items,
+    hourly,
+    dateLabel,
+    totalCount: totalCount ?? 0,
+    page,
+    pageSize: PAGE_SIZE,
+  });
 }
 
 /**
- * Calculate the UTC boundaries of "today" in a given timezone.
+ * Calculate UTC boundaries for "today" in a given timezone.
  */
 function getTodayBounds(tz: string) {
   try {
     const now = new Date();
+    const dateStr = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: tz,
+    }).format(now);
+    return getDateBounds(dateStr, tz);
+  } catch {
+    const now = new Date();
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    return { dayStart, dayEnd, dateLabel: now.toLocaleDateString("ja-JP") };
+  }
+}
 
-    // Get current time-of-day in the user's timezone
+/**
+ * Calculate UTC boundaries for a specific date (YYYY-MM-DD) in a given timezone.
+ */
+function getDateBounds(dateStr: string, tz: string) {
+  try {
+    // Parse the date
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    if (!y || !mo || !d) throw new Error("invalid date");
+
+    // Create a reference point at noon UTC on that date (to avoid DST edge cases)
+    const noonUtc = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
+
+    // Find the time-of-day at noonUtc in the target timezone
     const parts = new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
       minute: "numeric",
       second: "numeric",
       hour12: false,
       timeZone: tz,
-    }).formatToParts(now);
+    }).formatToParts(noonUtc);
 
-    const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+    const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "12") % 24;
     const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
-    const s = parseInt(parts.find((p) => p.type === "second")?.value ?? "0");
 
-    // Midnight in user's TZ = now - elapsed time since midnight
-    const msSinceMidnight = (h * 3600 + m * 60 + s) * 1000;
-    const todayStart = new Date(now.getTime() - msSinceMidnight);
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    // Offset = localTime - utcTime (in minutes)
+    const offsetMinutes = (h * 60 + m) - (12 * 60);
 
-    // Format today's date label
-    const todayLabel = new Intl.DateTimeFormat("ja-JP", {
+    // Midnight in user's TZ = YYYY-MM-DDT00:00 (local) = that timestamp in UTC
+    const midnightUtc = new Date(Date.UTC(y, mo - 1, d, 0, 0, 0) - offsetMinutes * 60 * 1000);
+    const endUtc = new Date(midnightUtc.getTime() + 24 * 60 * 60 * 1000);
+
+    // Format label
+    const labelDate = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
+    const dateLabel = new Intl.DateTimeFormat("ja-JP", {
+      year: "numeric",
       month: "long",
       day: "numeric",
       weekday: "short",
       timeZone: tz,
-    }).format(now);
+    }).format(labelDate);
 
-    return { todayStart, todayEnd, todayLabel };
+    return { dayStart: midnightUtc, dayEnd: endUtc, dateLabel };
   } catch {
-    // Fallback to UTC
-    const now = new Date();
-    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-    return { todayStart, todayEnd, todayLabel: now.toLocaleDateString("ja-JP") };
+    // Fallback
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    const dayStart = new Date(Date.UTC(y || 2026, (mo || 1) - 1, d || 1));
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    return { dayStart, dayEnd, dateLabel: dateStr };
   }
 }

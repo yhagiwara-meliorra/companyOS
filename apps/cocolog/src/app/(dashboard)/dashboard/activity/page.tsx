@@ -6,7 +6,7 @@ export default function ActivityPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">アクティビティ</h1>
         <p className="mt-1 text-sm text-slate-500">
-          直近24時間のメッセージ分析をリアルタイムで確認（30秒ごとに自動更新）。
+          日別のメッセージ分析を確認。
         </p>
       </div>
       <ActivityFeed />

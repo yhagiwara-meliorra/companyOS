@@ -55,8 +55,15 @@ export async function processMessageEvent(
     let userInfo;
     try {
       userInfo = await slack.getUserInfo(event.user);
-    } catch {
-      await updateStatus(db, ctx.webhookEventId, "failed", "failed to fetch user info");
+    } catch (userErr) {
+      const errMsg = userErr instanceof Error ? userErr.message : String(userErr);
+      console.error("[event-processor] failed to fetch user info:", {
+        user: event.user,
+        teamId: ctx.teamId,
+        error: errMsg,
+        botTokenLength: installation.bot_token?.length ?? 0,
+      });
+      await updateStatus(db, ctx.webhookEventId, "failed", `failed to fetch user info: ${errMsg}`);
       return;
     }
 

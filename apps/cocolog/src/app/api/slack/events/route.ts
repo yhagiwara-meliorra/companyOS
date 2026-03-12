@@ -15,6 +15,8 @@ export const runtime = "nodejs";
  *       insert webhook_events (pending) → return 200 → async processing via after()
  */
 export async function POST(request: NextRequest) {
+  console.log("[slack/events] POST received");
+
   // 1. Read raw body
   const body = await request.text();
   const timestamp = request.headers.get("x-slack-request-timestamp") ?? "";
@@ -23,6 +25,7 @@ export async function POST(request: NextRequest) {
   // 2. Verify signature
   const signingSecret = serverEnv().SLACK_SIGNING_SECRET;
   if (!verifySlackSignature(signingSecret, timestamp, body, signature)) {
+    console.error("[slack/events] invalid signature");
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
@@ -30,9 +33,12 @@ export async function POST(request: NextRequest) {
   let payload;
   try {
     payload = SlackEventPayloadSchema.parse(JSON.parse(body));
-  } catch {
+  } catch (parseErr) {
+    console.error("[slack/events] invalid payload:", parseErr instanceof Error ? parseErr.message : parseErr);
     return NextResponse.json({ error: "invalid payload" }, { status: 400 });
   }
+
+  console.log("[slack/events] payload type:", payload.type);
 
   // 4. Handle url_verification
   if (payload.type === "url_verification") {
@@ -61,12 +67,24 @@ export async function POST(request: NextRequest) {
       const db = createAdminClient();
 
       // Find connection for this team
-      const { data: installation } = await db
+      const { data: installation, error: installErr } = await db
         .schema("integrations")
         .from("installations")
         .select("connection_id")
         .eq("provider_team_id", payload.team_id)
         .single();
+
+      if (installErr) {
+        console.error("[slack/events] installation lookup failed:", {
+          team_id: payload.team_id,
+          error: installErr.message,
+          code: installErr.code,
+        });
+      }
+
+      if (!installation) {
+        console.warn("[slack/events] no installation found for team:", payload.team_id);
+      }
 
       if (installation) {
         // Compute payload hash (for dedup, not storing raw text)
@@ -76,7 +94,7 @@ export async function POST(request: NextRequest) {
           .digest("hex");
 
         // 8. Insert webhook_event as pending
-        const { data: webhookEvent } = await db
+        const { data: webhookEvent, error: insertErr } = await db
           .schema("integrations")
           .from("webhook_events")
           .insert({
@@ -98,6 +116,14 @@ export async function POST(request: NextRequest) {
           })
           .select("id")
           .single();
+
+        if (insertErr) {
+          console.error("[slack/events] webhook_events insert failed:", {
+            error: insertErr.message,
+            code: insertErr.code,
+            connection_id: installation.connection_id,
+          });
+        }
 
         // 9. Return 200 immediately, then process async via after()
         if (webhookEvent) {

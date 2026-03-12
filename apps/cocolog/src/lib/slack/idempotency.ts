@@ -26,5 +26,14 @@ export async function checkIdempotency(
     return true;
   }
 
+  // Log non-duplicate errors (e.g. schema not accessible, table missing)
+  if (error) {
+    console.error("[idempotency] insert failed (non-duplicate):", {
+      error: error.message,
+      code: error.code,
+      key,
+    });
+  }
+
   return false;
 }

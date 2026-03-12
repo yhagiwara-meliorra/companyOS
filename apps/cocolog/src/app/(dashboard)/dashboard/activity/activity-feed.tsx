@@ -10,6 +10,7 @@ interface ActivityItem {
   channelName: string;
   sentAt: string;
   permalink: string | null;
+  content: string | null;
   sceneLabel: string | null;
   scores: Record<string, { value?: number; confidence?: number } | unknown>;
 }
@@ -17,6 +18,7 @@ interface ActivityItem {
 interface ActivityData {
   items: ActivityItem[];
   hourly: { hour: number; count: number }[];
+  todayLabel: string;
 }
 
 const SCENE_LABELS: Record<string, string> = {
@@ -46,11 +48,6 @@ const SCORE_LABELS: Record<string, string> = {
 function formatTime(iso: string) {
   const d = new Date(iso);
   return d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString("ja-JP", { month: "short", day: "numeric" });
 }
 
 function ScoreBadge({ label, value }: { label: string; value: number }) {
@@ -107,17 +104,19 @@ export function ActivityFeed() {
     );
   }
 
+  const todayLabel = data?.todayLabel ?? "";
+
   if (!data || data.items.length === 0) {
     return (
       <div className="space-y-6">
         <div className="rounded-xl border border-border-light bg-surface-raised p-6">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">
-            時間帯別メッセージ数（直近24時間）
+            時間帯別メッセージ数{todayLabel ? `（${todayLabel}）` : ""}
           </h3>
           <p className="text-sm text-slate-400">データがありません。</p>
         </div>
         <p className="text-center text-sm text-slate-400">
-          直近24時間のアクティビティはありません。
+          今日のアクティビティはまだありません。
         </p>
       </div>
     );
@@ -128,7 +127,7 @@ export function ActivityFeed() {
       {/* Hourly chart */}
       <div className="rounded-xl border border-border-light bg-surface-raised p-6">
         <h3 className="mb-3 text-sm font-semibold text-slate-700">
-          時間帯別メッセージ数（直近24時間）
+          時間帯別メッセージ数{todayLabel ? `（${todayLabel}）` : ""}
         </h3>
         <HourlyChart data={data.hourly} />
       </div>
@@ -154,6 +153,7 @@ export function ActivityFeed() {
                 </div>
               )}
 
+              {/* Left: metadata */}
               <div className="min-w-0 flex-1">
                 {/* Header row */}
                 <div className="flex items-center gap-2 text-sm">
@@ -163,7 +163,7 @@ export function ActivityFeed() {
                   <span className="text-slate-400">in</span>
                   <span className="text-slate-600">#{item.channelName}</span>
                   <span className="ml-auto shrink-0 text-xs text-slate-400">
-                    {formatDate(item.sentAt)} {formatTime(item.sentAt)}
+                    {formatTime(item.sentAt)}
                   </span>
                 </div>
 
@@ -203,6 +203,15 @@ export function ActivityFeed() {
                   </a>
                 )}
               </div>
+
+              {/* Right: message content */}
+              {item.content && (
+                <div className="hidden shrink-0 md:block md:w-1/3 lg:w-2/5">
+                  <p className="line-clamp-3 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+                    {item.content}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         ))}

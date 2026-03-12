@@ -81,8 +81,9 @@ export async function processMessageEvent(
       .single();
 
     // Default to "members_only" — owner is included in memberships (no role filter).
-    const analysisScope =
-      (orgRow?.settings as Record<string, unknown> | null)?.analysis_scope ?? "members_only";
+    const orgSettings = (orgRow?.settings as Record<string, unknown> | null) ?? {};
+    const analysisScope = orgSettings.analysis_scope ?? "members_only";
+    const storeMessageContent = orgSettings.store_message_content === true;
 
     if (analysisScope === "members_only") {
       // Only analyze messages from Slack users whose email matches an org member.
@@ -223,13 +224,13 @@ export async function processMessageEvent(
       // not critical
     }
 
-    // Hash content (NEVER store raw text)
+    // Hash content (raw text stored only when org opts in via store_message_content)
     const contentHash = crypto
       .createHash("sha256")
       .update(event.text)
       .digest("hex");
 
-    // Insert message_ref
+    // Insert message_ref (store content only when org setting enables it)
     const { data: messageRef } = await db
       .schema("integrations")
       .from("message_refs")
@@ -245,6 +246,7 @@ export async function processMessageEvent(
           sent_at: new Date(parseFloat(event.ts) * 1000).toISOString(),
           permalink,
           content_hash: contentHash,
+          content: storeMessageContent ? event.text : null,
           metadata: { channel_type: event.channel_type },
         },
         { onConflict: "connection_id,provider_message_id" },
@@ -252,7 +254,7 @@ export async function processMessageEvent(
       .select("id")
       .single();
 
-    // Classify the message (text is transient — never stored)
+    // Classify the message (text is passed transiently for AI analysis)
     if (messageRef) {
       try {
         await classifyMessage(event.text, messageRef.id);

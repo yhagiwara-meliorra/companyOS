@@ -60,6 +60,43 @@ export async function updateTimezone(formData: FormData) {
   revalidatePath("/dashboard/settings");
 }
 
+export async function updateContentStorage(formData: FormData) {
+  const value = formData.get("store_message_content") as string;
+  const enabled = value === "true";
+
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Verify user is owner/admin of their org
+  const { data: membership } = await supabase
+    .from("memberships")
+    .select("org_id, role")
+    .eq("profile_id", user.id)
+    .single() as { data: { org_id: string; role: string } | null };
+
+  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) return;
+
+  // Update org settings (merge with existing)
+  const db = createAdminClient();
+  const { data: org } = await db
+    .from("organizations")
+    .select("settings")
+    .eq("id", membership.org_id)
+    .single();
+
+  const currentSettings = (org?.settings as Record<string, unknown>) ?? {};
+
+  await db
+    .from("organizations")
+    .update({ settings: { ...currentSettings, store_message_content: enabled } })
+    .eq("id", membership.org_id);
+
+  revalidatePath("/dashboard/settings");
+}
+
 export async function disconnectSlack(formData: FormData) {
   const installationId = formData.get("installation_id") as string;
   if (!installationId) return;

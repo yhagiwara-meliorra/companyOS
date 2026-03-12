@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { DisconnectButton } from "./disconnect-button";
 import { AnalysisScopeSetting } from "./analysis-scope-setting";
 import { TimezoneSetting } from "./timezone-setting";
+import { ContentStorageSetting } from "./content-storage-setting";
 
 const ERROR_MESSAGES: Record<string, string> = {
   slack_denied: "Slack連携が拒否されました。",
@@ -34,6 +35,7 @@ export default async function SettingsPage({
   const membership = memberships?.[0];
   const org = membership?.organizations ?? null;
   const analysisScope = (org?.settings?.analysis_scope as string) ?? "members_only";
+  const storeMessageContent = org?.settings?.store_message_content === true;
   const isOwnerOrAdmin =
     membership?.role === "owner" || membership?.role === "admin";
 
@@ -173,7 +175,15 @@ export default async function SettingsPage({
           <CardHeader>
             <CardTitle>分析設定</CardTitle>
           </CardHeader>
-          <AnalysisScopeSetting currentScope={analysisScope} />
+          <div className="space-y-6">
+            <AnalysisScopeSetting currentScope={analysisScope} />
+            <div className="border-t border-border-light pt-4">
+              <ContentStorageSetting
+                currentValue={storeMessageContent}
+                isOwnerOrAdmin={isOwnerOrAdmin}
+              />
+            </div>
+          </div>
         </Card>
       )}
 

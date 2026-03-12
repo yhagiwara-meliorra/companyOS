@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/activity/recent
- * Returns recent message analyses for the current user's org (last 24h).
- * Used by the activity feed and hourly chart.
+ * Returns today's message analyses for the current user's org.
+ * "Today" is calculated in the user's timezone (via ?tz= param).
  */
 export async function GET(request: Request) {
   const supabase = await createServerClient();
@@ -19,11 +19,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Get user's timezone from query params (fallback to UTC)
   const { searchParams } = new URL(request.url);
   const userTimezone = searchParams.get("tz") || "UTC";
 
-  // Get user's org
   const { data: membership } = await supabase
     .from("memberships")
     .select("org_id")
@@ -31,26 +29,41 @@ export async function GET(request: Request) {
     .single() as { data: { org_id: string } | null };
 
   if (!membership) {
-    return NextResponse.json({ items: [], hourly: [] });
+    return NextResponse.json({ items: [], hourly: [], todayLabel: "" });
   }
 
   const db = createAdminClient();
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-  // Fetch recent message_refs with analyses
-  const { data: refs } = await db
+  // Calculate today's boundaries in the user's timezone
+  const { todayStart, todayEnd, todayLabel } = getTodayBounds(userTimezone);
+
+  // Fetch today's message_refs (content column added in migration 00005)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: refs } = (await (db as any)
     .schema("integrations")
     .from("message_refs")
     .select(
-      "id, person_id, provider_channel_id, sent_at, channel_ref_id, sender_ref_id, permalink",
+      "id, person_id, provider_channel_id, sent_at, channel_ref_id, sender_ref_id, permalink, content",
     )
     .eq("org_id", membership.org_id)
-    .gte("sent_at", since)
+    .gte("sent_at", todayStart.toISOString())
+    .lt("sent_at", todayEnd.toISOString())
     .order("sent_at", { ascending: false })
-    .limit(50);
+    .limit(200)) as {
+    data: {
+      id: string;
+      person_id: string | null;
+      provider_channel_id: string;
+      sent_at: string;
+      channel_ref_id: string | null;
+      sender_ref_id: string | null;
+      permalink: string | null;
+      content: string | null;
+    }[] | null;
+  };
 
   if (!refs || refs.length === 0) {
-    return NextResponse.json({ items: [], hourly: [] });
+    return NextResponse.json({ items: [], hourly: [], todayLabel });
   }
 
   // Fetch analyses for these message_refs
@@ -107,6 +120,7 @@ export async function GET(request: Request) {
       channelName: channelName ?? ref.provider_channel_id,
       sentAt: ref.sent_at,
       permalink: ref.permalink,
+      content: ref.content ?? null,
       sceneLabel: (scores as Record<string, unknown>).scene_label ?? null,
       scores: Object.fromEntries(
         Object.entries(scores).filter(
@@ -116,7 +130,7 @@ export async function GET(request: Request) {
     };
   });
 
-  // Build hourly distribution (last 24h) in user's timezone
+  // Build hourly distribution (today) in user's timezone
   const hourly = Array.from({ length: 24 }, (_, i) => ({
     hour: i,
     count: 0,
@@ -124,7 +138,6 @@ export async function GET(request: Request) {
   for (const ref of refs) {
     let hour: number;
     try {
-      // Format the hour in the user's timezone
       const formatted = new Intl.DateTimeFormat("en-US", {
         hour: "numeric",
         hour12: false,
@@ -132,11 +145,53 @@ export async function GET(request: Request) {
       }).format(new Date(ref.sent_at));
       hour = parseInt(formatted, 10) % 24;
     } catch {
-      // Invalid timezone — fallback to UTC
       hour = new Date(ref.sent_at).getUTCHours();
     }
     hourly[hour].count++;
   }
 
-  return NextResponse.json({ items, hourly });
+  return NextResponse.json({ items, hourly, todayLabel });
+}
+
+/**
+ * Calculate the UTC boundaries of "today" in a given timezone.
+ */
+function getTodayBounds(tz: string) {
+  try {
+    const now = new Date();
+
+    // Get current time-of-day in the user's timezone
+    const parts = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      hour12: false,
+      timeZone: tz,
+    }).formatToParts(now);
+
+    const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+    const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const s = parseInt(parts.find((p) => p.type === "second")?.value ?? "0");
+
+    // Midnight in user's TZ = now - elapsed time since midnight
+    const msSinceMidnight = (h * 3600 + m * 60 + s) * 1000;
+    const todayStart = new Date(now.getTime() - msSinceMidnight);
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    // Format today's date label
+    const todayLabel = new Intl.DateTimeFormat("ja-JP", {
+      month: "long",
+      day: "numeric",
+      weekday: "short",
+      timeZone: tz,
+    }).format(now);
+
+    return { todayStart, todayEnd, todayLabel };
+  } catch {
+    // Fallback to UTC
+    const now = new Date();
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    return { todayStart, todayEnd, todayLabel: now.toLocaleDateString("ja-JP") };
+  }
 }

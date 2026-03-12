@@ -65,9 +65,9 @@ const PIE_COLORS = [
 type Granularity = "daily" | "weekly" | "monthly";
 
 const GRANULARITY_OPTIONS: { value: Granularity; label: string; days: number }[] = [
-  { value: "daily", label: "デイリー", days: 30 },
-  { value: "weekly", label: "ウィークリー", days: 90 },
-  { value: "monthly", label: "マンスリー", days: 365 },
+  { value: "daily", label: "日次", days: 30 },
+  { value: "weekly", label: "週次", days: 90 },
+  { value: "monthly", label: "月次", days: 365 },
 ];
 
 function formatPeriod(period: string, granularity: Granularity) {

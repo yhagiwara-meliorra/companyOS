@@ -2,6 +2,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { WeeklyTrendChart, SIGNAL_COLORS } from "@/components/charts/weekly-trend-chart";
 import { SignalBar } from "@/components/charts/signal-bar";
+import { MemberAnalytics } from "./member-analytics";
 
 export default async function AnalyticsPage() {
   const supabase = await createServerClient();
@@ -304,6 +305,14 @@ export default async function AnalyticsPage() {
           </p>
         )}
       </Card>
+
+      {/* Per-member tone/politeness trends + scene distribution */}
+      <div>
+        <h2 className="mb-4 text-lg font-bold text-slate-900">
+          メンバー別 トーン・丁寧さ推移 &amp; コメント分類
+        </h2>
+        <MemberAnalytics />
+      </div>
     </div>
   );
 }

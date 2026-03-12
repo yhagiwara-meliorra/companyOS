@@ -9,7 +9,7 @@ export const runtime = "nodejs";
  * Returns recent message analyses for the current user's org (last 24h).
  * Used by the activity feed and hourly chart.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -18,6 +18,10 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  // Get user's timezone from query params (fallback to UTC)
+  const { searchParams } = new URL(request.url);
+  const userTimezone = searchParams.get("tz") || "UTC";
 
   // Get user's org
   const { data: membership } = await supabase
@@ -112,13 +116,25 @@ export async function GET() {
     };
   });
 
-  // Build hourly distribution (last 24h)
+  // Build hourly distribution (last 24h) in user's timezone
   const hourly = Array.from({ length: 24 }, (_, i) => ({
     hour: i,
     count: 0,
   }));
   for (const ref of refs) {
-    const hour = new Date(ref.sent_at).getHours();
+    let hour: number;
+    try {
+      // Format the hour in the user's timezone
+      const formatted = new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: userTimezone,
+      }).format(new Date(ref.sent_at));
+      hour = parseInt(formatted, 10) % 24;
+    } catch {
+      // Invalid timezone — fallback to UTC
+      hour = new Date(ref.sent_at).getUTCHours();
+    }
     hourly[hour].count++;
   }
 

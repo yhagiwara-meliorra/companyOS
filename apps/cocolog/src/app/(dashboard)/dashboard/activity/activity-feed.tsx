@@ -28,6 +28,12 @@ const SCENE_LABELS: Record<string, string> = {
   greeting: "挨拶",
   discussion: "議論",
   announcement: "アナウンス",
+  gratitude: "感謝",
+  apology: "謝罪",
+  casual: "雑談",
+  status_update: "状況報告",
+  decision: "意思決定",
+  other: "その他",
 };
 
 const SCORE_LABELS: Record<string, string> = {
@@ -70,7 +76,8 @@ export function ActivityFeed() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch("/api/activity/recent");
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await fetch(`/api/activity/recent?tz=${encodeURIComponent(tz)}`);
       if (res.ok) {
         const json = await res.json();
         setData(json);

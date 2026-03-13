@@ -143,14 +143,22 @@ export async function GET() {
   return NextResponse.json(results);
 }
 
-async function slackFetch(token: string, method: string, body?: Record<string, unknown>) {
+async function slackFetch(token: string, method: string, params?: Record<string, unknown>) {
+  const formBody = new URLSearchParams();
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        formBody.append(key, String(value));
+      }
+    }
+  }
   const res = await fetch(`https://slack.com/api/${method}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: formBody.toString(),
   });
   return res.json();
 }

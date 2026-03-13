@@ -14,15 +14,26 @@ export class SlackClient {
 
   async apiCall<T = unknown>(
     method: string,
-    body?: Record<string, unknown>,
+    params?: Record<string, unknown>,
   ): Promise<T> {
+    // Use application/x-www-form-urlencoded — some Slack API methods
+    // (e.g. conversations.info) silently ignore JSON body parameters.
+    const formBody = new URLSearchParams();
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          formBody.append(key, String(value));
+        }
+      }
+    }
+
     const res = await fetch(`https://slack.com/api/${method}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: formBody.toString(),
     });
 
     if (!res.ok) {

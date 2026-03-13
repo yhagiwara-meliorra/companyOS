@@ -15,6 +15,16 @@ interface ActivityItem {
   scores: Record<string, { value?: number; confidence?: number } | unknown>;
 }
 
+interface SenderOption {
+  id: string;
+  displayName: string;
+}
+
+interface ChannelOption {
+  id: string;
+  channelName: string;
+}
+
 interface ActivityData {
   items: ActivityItem[];
   hourly: { hour: number; count: number }[];
@@ -22,6 +32,8 @@ interface ActivityData {
   totalCount: number;
   page: number;
   pageSize: number;
+  senders: SenderOption[];
+  channels: ChannelOption[];
 }
 
 const SCENE_LABELS: Record<string, string> = {
@@ -84,12 +96,16 @@ export function ActivityFeed() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(getLocalToday);
   const [page, setPage] = useState(1);
+  const [senderId, setSenderId] = useState("all");
+  const [channelId, setChannelId] = useState("all");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const params = new URLSearchParams({ tz, date: selectedDate, page: String(page) });
+      if (senderId !== "all") params.set("senderId", senderId);
+      if (channelId !== "all") params.set("channelId", channelId);
       const res = await fetch(`/api/activity/recent?${params}`);
       if (res.ok) {
         const json = await res.json();
@@ -100,7 +116,7 @@ export function ActivityFeed() {
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, page]);
+  }, [selectedDate, page, senderId, channelId]);
 
   useEffect(() => {
     fetchData();
@@ -130,6 +146,16 @@ export function ActivityFeed() {
 
   function goToToday() {
     handleDateChange(getLocalToday());
+  }
+
+  function handleSenderChange(newSenderId: string) {
+    setSenderId(newSenderId);
+    setPage(1);
+  }
+
+  function handleChannelChange(newChannelId: string) {
+    setChannelId(newChannelId);
+    setPage(1);
   }
 
   const totalCount = data?.totalCount ?? 0;
@@ -207,6 +233,63 @@ export function ActivityFeed() {
           </button>
         </div>
       </div>
+
+      {/* Filter bar */}
+      {(data?.senders?.length ?? 0) > 0 || (data?.channels?.length ?? 0) > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {(data?.senders?.length ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="sender-filter" className="text-xs font-medium text-slate-500">
+                送信者
+              </label>
+              <select
+                id="sender-filter"
+                value={senderId}
+                onChange={(e) => handleSenderChange(e.target.value)}
+                className="rounded-md border border-border-light bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                <option value="all">全員</option>
+                {data?.senders.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.displayName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(data?.channels?.length ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="channel-filter" className="text-xs font-medium text-slate-500">
+                チャンネル
+              </label>
+              <select
+                id="channel-filter"
+                value={channelId}
+                onChange={(e) => handleChannelChange(e.target.value)}
+                className="rounded-md border border-border-light bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                <option value="all">すべて</option>
+                {data?.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.channelName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(senderId !== "all" || channelId !== "all") && (
+            <button
+              type="button"
+              onClick={() => { setSenderId("all"); setChannelId("all"); setPage(1); }}
+              className="text-xs text-slate-400 hover:text-slate-600"
+            >
+              フィルター解除
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {loading ? (
         <div className="animate-pulse space-y-4">

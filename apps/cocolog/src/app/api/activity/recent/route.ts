@@ -11,9 +11,11 @@ const PAGE_SIZE = 50;
  * Returns message analyses for a given date (default: today).
  *
  * Query params:
- *   tz    — IANA timezone (default: UTC)
- *   date  — YYYY-MM-DD in user's timezone (default: today)
- *   page  — 1-based page number (default: 1)
+ *   tz        — IANA timezone (default: UTC)
+ *   date      — YYYY-MM-DD in user's timezone (default: today)
+ *   page      — 1-based page number (default: 1)
+ *   senderId  — external_users.id to filter by sender (default: "all")
+ *   channelId — external_channels.id to filter by channel (default: "all")
  */
 export async function GET(request: Request) {
   const supabase = await createServerClient();
@@ -29,6 +31,8 @@ export async function GET(request: Request) {
   const userTimezone = searchParams.get("tz") || "UTC";
   const dateParam = searchParams.get("date"); // YYYY-MM-DD or null (= today)
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+  const senderId = searchParams.get("senderId") || "all";
+  const channelId = searchParams.get("channelId") || "all";
 
   const { data: membership } = await supabase
     .from("memberships")
@@ -37,10 +41,45 @@ export async function GET(request: Request) {
     .single() as { data: { org_id: string } | null };
 
   if (!membership) {
-    return NextResponse.json({ items: [], hourly: [], dateLabel: "", totalCount: 0, page: 1, pageSize: PAGE_SIZE });
+    return NextResponse.json({ items: [], hourly: [], dateLabel: "", totalCount: 0, page: 1, pageSize: PAGE_SIZE, senders: [], channels: [] });
   }
 
   const db = createAdminClient();
+
+  // ── Fetch filter options (available senders & channels for this org) ──
+  const { data: connection } = await db
+    .schema("integrations")
+    .from("connections")
+    .select("id")
+    .eq("org_id", membership.org_id)
+    .eq("provider", "slack")
+    .eq("status", "active")
+    .single();
+
+  const senderOptions: { id: string; displayName: string }[] = [];
+  const channelOptions: { id: string; channelName: string }[] = [];
+
+  if (connection) {
+    const { data: users } = await db
+      .schema("integrations")
+      .from("external_users")
+      .select("id, display_name")
+      .eq("connection_id", connection.id)
+      .order("display_name");
+    for (const u of users ?? []) {
+      senderOptions.push({ id: u.id, displayName: u.display_name });
+    }
+
+    const { data: chans } = await db
+      .schema("integrations")
+      .from("external_channels")
+      .select("id, channel_name")
+      .eq("connection_id", connection.id)
+      .order("channel_name");
+    for (const c of chans ?? []) {
+      channelOptions.push({ id: c.id, channelName: c.channel_name });
+    }
+  }
 
   // Calculate day boundaries
   const { dayStart, dayEnd, dateLabel } = dateParam
@@ -49,23 +88,29 @@ export async function GET(request: Request) {
 
   // ── Count total items for the day ──
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count: totalCount } = (await (db as any)
+  let countQuery = (db as any)
     .schema("integrations")
     .from("message_refs")
     .select("id", { count: "exact", head: true })
     .eq("org_id", membership.org_id)
     .gte("sent_at", dayStart.toISOString())
-    .lt("sent_at", dayEnd.toISOString())) as { count: number | null };
+    .lt("sent_at", dayEnd.toISOString());
+  if (senderId !== "all") countQuery = countQuery.eq("sender_ref_id", senderId);
+  if (channelId !== "all") countQuery = countQuery.eq("channel_ref_id", channelId);
+  const { count: totalCount } = (await countQuery) as { count: number | null };
 
   // ── Fetch ALL refs for the day (for hourly chart) — only ids + sent_at ──
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: allRefs } = (await (db as any)
+  let hourlyQuery = (db as any)
     .schema("integrations")
     .from("message_refs")
     .select("sent_at")
     .eq("org_id", membership.org_id)
     .gte("sent_at", dayStart.toISOString())
-    .lt("sent_at", dayEnd.toISOString())) as { data: { sent_at: string }[] | null };
+    .lt("sent_at", dayEnd.toISOString());
+  if (senderId !== "all") hourlyQuery = hourlyQuery.eq("sender_ref_id", senderId);
+  if (channelId !== "all") hourlyQuery = hourlyQuery.eq("channel_ref_id", channelId);
+  const { data: allRefs } = (await hourlyQuery) as { data: { sent_at: string }[] | null };
 
   // Build hourly distribution from ALL messages
   const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
@@ -88,7 +133,7 @@ export async function GET(request: Request) {
   const offset = (page - 1) * PAGE_SIZE;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: refs } = (await (db as any)
+  let refsQuery = (db as any)
     .schema("integrations")
     .from("message_refs")
     .select(
@@ -96,7 +141,10 @@ export async function GET(request: Request) {
     )
     .eq("org_id", membership.org_id)
     .gte("sent_at", dayStart.toISOString())
-    .lt("sent_at", dayEnd.toISOString())
+    .lt("sent_at", dayEnd.toISOString());
+  if (senderId !== "all") refsQuery = refsQuery.eq("sender_ref_id", senderId);
+  if (channelId !== "all") refsQuery = refsQuery.eq("channel_ref_id", channelId);
+  const { data: refs } = (await refsQuery
     .order("sent_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)) as {
     data: {
@@ -119,6 +167,8 @@ export async function GET(request: Request) {
       totalCount: totalCount ?? 0,
       page,
       pageSize: PAGE_SIZE,
+      senders: senderOptions,
+      channels: channelOptions,
     });
   }
 
@@ -193,6 +243,8 @@ export async function GET(request: Request) {
     totalCount: totalCount ?? 0,
     page,
     pageSize: PAGE_SIZE,
+    senders: senderOptions,
+    channels: channelOptions,
   });
 }
 

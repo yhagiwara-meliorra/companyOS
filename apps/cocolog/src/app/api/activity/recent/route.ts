@@ -59,7 +59,59 @@ export async function GET(request: Request) {
   const senderOptions: { id: string; displayName: string }[] = [];
   const channelOptions: { id: string; channelName: string }[] = [];
 
+  // ── Channel-scoping: restrict to channels the logged-in user participates in ──
+  let allowedChannelIds: string[] | null = null;
+
   if (connection) {
+    // Find the logged-in user's corresponding external_user via email
+    const userEmail = user.email?.toLowerCase();
+    if (userEmail) {
+      const { data: myExtUser } = await db
+        .schema("integrations")
+        .from("external_users")
+        .select("id")
+        .eq("connection_id", connection.id)
+        .ilike("email", userEmail)
+        .maybeSingle();
+
+      if (myExtUser) {
+        // Get distinct channels this user has sent messages in
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: channelRefs } = await (db as any)
+          .schema("integrations")
+          .from("message_refs")
+          .select("channel_ref_id")
+          .eq("sender_ref_id", myExtUser.id)
+          .not("channel_ref_id", "is", null)
+          .limit(10000);
+
+        const refs_list = (channelRefs ?? []) as { channel_ref_id: string | null }[];
+        const ids: string[] = refs_list
+          .map((r) => r.channel_ref_id)
+          .filter((id): id is string => typeof id === "string");
+        allowedChannelIds = [...new Set(ids)];
+      }
+    }
+
+    // If we couldn't determine channels (no matching external_user), default to empty
+    if (allowedChannelIds === null) {
+      allowedChannelIds = [];
+    }
+
+    // Return empty immediately if user has no accessible channels
+    if (allowedChannelIds.length === 0) {
+      return NextResponse.json({
+        items: [],
+        hourly: Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 })),
+        dateLabel: "",
+        totalCount: 0,
+        page: 1,
+        pageSize: PAGE_SIZE,
+        senders: [],
+        channels: [],
+      });
+    }
+
     const { data: users } = await db
       .schema("integrations")
       .from("external_users")
@@ -76,8 +128,11 @@ export async function GET(request: Request) {
       .select("id, channel_name")
       .eq("connection_id", connection.id)
       .order("channel_name");
+    // Only show channels the user has access to
     for (const c of chans ?? []) {
-      channelOptions.push({ id: c.id, channelName: c.channel_name });
+      if (allowedChannelIds.includes(c.id)) {
+        channelOptions.push({ id: c.id, channelName: c.channel_name });
+      }
     }
   }
 
@@ -97,6 +152,7 @@ export async function GET(request: Request) {
     .lt("sent_at", dayEnd.toISOString());
   if (senderId !== "all") countQuery = countQuery.eq("sender_ref_id", senderId);
   if (channelId !== "all") countQuery = countQuery.eq("channel_ref_id", channelId);
+  if (allowedChannelIds && allowedChannelIds.length > 0) countQuery = countQuery.in("channel_ref_id", allowedChannelIds);
   const { count: totalCount } = (await countQuery) as { count: number | null };
 
   // ── Fetch ALL refs for the day (for hourly chart) — only ids + sent_at ──
@@ -110,6 +166,7 @@ export async function GET(request: Request) {
     .lt("sent_at", dayEnd.toISOString());
   if (senderId !== "all") hourlyQuery = hourlyQuery.eq("sender_ref_id", senderId);
   if (channelId !== "all") hourlyQuery = hourlyQuery.eq("channel_ref_id", channelId);
+  if (allowedChannelIds && allowedChannelIds.length > 0) hourlyQuery = hourlyQuery.in("channel_ref_id", allowedChannelIds);
   const { data: allRefs } = (await hourlyQuery) as { data: { sent_at: string }[] | null };
 
   // Build hourly distribution from ALL messages
@@ -144,6 +201,7 @@ export async function GET(request: Request) {
     .lt("sent_at", dayEnd.toISOString());
   if (senderId !== "all") refsQuery = refsQuery.eq("sender_ref_id", senderId);
   if (channelId !== "all") refsQuery = refsQuery.eq("channel_ref_id", channelId);
+  if (allowedChannelIds && allowedChannelIds.length > 0) refsQuery = refsQuery.in("channel_ref_id", allowedChannelIds);
   const { data: refs } = (await refsQuery
     .order("sent_at", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1)) as {

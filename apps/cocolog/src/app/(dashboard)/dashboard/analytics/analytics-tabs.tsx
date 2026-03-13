@@ -9,7 +9,7 @@ interface AnalyticsTabsProps {
 
 const TABS = [
   { id: "org", label: "組織分析" },
-  { id: "tone", label: "トーン分析" },
+  { id: "tone", label: "個人分析" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];

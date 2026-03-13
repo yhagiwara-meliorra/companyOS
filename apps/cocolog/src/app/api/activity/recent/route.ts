@@ -16,6 +16,7 @@ const PAGE_SIZE = 50;
  *   page      — 1-based page number (default: 1)
  *   senderId  — external_users.id to filter by sender (default: "all")
  *   channelId — external_channels.id to filter by channel (default: "all")
+ *   riskOnly  — "true" to only show harassment-risk messages (score ≤ 30)
  */
 export async function GET(request: Request) {
   const supabase = await createServerClient();
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const senderId = searchParams.get("senderId") || "all";
   const channelId = searchParams.get("channelId") || "all";
+  const riskOnly = searchParams.get("riskOnly") === "true";
 
   const { data: membership } = await supabase
     .from("memberships")
@@ -60,10 +62,11 @@ export async function GET(request: Request) {
   const channelOptions: { id: string; channelName: string }[] = [];
 
   // ── Channel-scoping: restrict to channels the logged-in user participates in ──
+  // If we CAN identify the user's channels → scope to those (privacy).
+  // If we CANNOT (no matching external_user, or no messages yet) → show all (graceful fallback).
   let allowedChannelIds: string[] | null = null;
 
   if (connection) {
-    // Find the logged-in user's corresponding external_user via email
     const userEmail = user.email?.toLowerCase();
     if (userEmail) {
       const { data: myExtUser } = await db
@@ -75,7 +78,6 @@ export async function GET(request: Request) {
         .maybeSingle();
 
       if (myExtUser) {
-        // Get distinct channels this user has sent messages in
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: channelRefs } = await (db as any)
           .schema("integrations")
@@ -89,27 +91,11 @@ export async function GET(request: Request) {
         const ids: string[] = refs_list
           .map((r) => r.channel_ref_id)
           .filter((id): id is string => typeof id === "string");
-        allowedChannelIds = [...new Set(ids)];
+        // Only apply scoping when we have positive channel IDs
+        if (ids.length > 0) {
+          allowedChannelIds = [...new Set(ids)];
+        }
       }
-    }
-
-    // If we couldn't determine channels (no matching external_user), default to empty
-    if (allowedChannelIds === null) {
-      allowedChannelIds = [];
-    }
-
-    // Return empty immediately if user has no accessible channels
-    if (allowedChannelIds.length === 0) {
-      return NextResponse.json({
-        items: [],
-        hourly: Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 })),
-        dateLabel: "",
-        totalCount: 0,
-        page: 1,
-        pageSize: PAGE_SIZE,
-        senders: [],
-        channels: [],
-      });
     }
 
     const { data: users } = await db
@@ -128,9 +114,9 @@ export async function GET(request: Request) {
       .select("id, channel_name")
       .eq("connection_id", connection.id)
       .order("channel_name");
-    // Only show channels the user has access to
     for (const c of chans ?? []) {
-      if (allowedChannelIds.includes(c.id)) {
+      // Only filter channels if scoping is active
+      if (!allowedChannelIds || allowedChannelIds.includes(c.id)) {
         channelOptions.push({ id: c.id, channelName: c.channel_name });
       }
     }
@@ -141,7 +127,97 @@ export async function GET(request: Request) {
     ? getDateBounds(dateParam, userTimezone)
     : getTodayBounds(userTimezone);
 
-  // ── Count total items for the day ──
+  // Helper: apply common filters to a query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function applyFilters(query: any) {
+    let q = query;
+    if (senderId !== "all") q = q.eq("sender_ref_id", senderId);
+    if (channelId !== "all") q = q.eq("channel_ref_id", channelId);
+    if (allowedChannelIds && allowedChannelIds.length > 0) q = q.in("channel_ref_id", allowedChannelIds);
+    return q;
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // riskOnly mode: fetch more refs, filter by analysis scores
+  // ──────────────────────────────────────────────────────────
+  if (riskOnly) {
+    // Fetch a large batch for the day (up to 1000)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let batchQuery = (db as any)
+      .schema("integrations")
+      .from("message_refs")
+      .select("id, person_id, provider_channel_id, sent_at, channel_ref_id, sender_ref_id, permalink, content")
+      .eq("org_id", membership.org_id)
+      .gte("sent_at", dayStart.toISOString())
+      .lt("sent_at", dayEnd.toISOString());
+    batchQuery = applyFilters(batchQuery);
+    const { data: batchRefs } = (await batchQuery
+      .order("sent_at", { ascending: false })
+      .limit(1000)) as { data: RefRow[] | null };
+
+    if (!batchRefs || batchRefs.length === 0) {
+      return NextResponse.json({
+        items: [],
+        hourly: buildHourly([], userTimezone),
+        dateLabel,
+        totalCount: 0,
+        page,
+        pageSize: PAGE_SIZE,
+        senders: senderOptions,
+        channels: channelOptions,
+      });
+    }
+
+    // Fetch analyses for all batch refs
+    const refIds = batchRefs.map((r) => r.id);
+    const analysisMap = await fetchAnalyses(db, refIds);
+
+    // Filter for risk: tone_score <= 0.30 OR politeness_score <= 0.30
+    const riskRefs = batchRefs.filter((ref) => {
+      const scores = analysisMap.get(ref.id);
+      if (!scores) return false;
+      const tone = typeof scores.tone_score === "number" ? scores.tone_score : null;
+      const politeness = typeof scores.politeness_score === "number" ? scores.politeness_score : null;
+      return (tone !== null && tone <= 0.30) || (politeness !== null && politeness <= 0.30);
+    });
+
+    const riskTotal = riskRefs.length;
+    const riskOffset = (page - 1) * PAGE_SIZE;
+    const riskPage = riskRefs.slice(riskOffset, riskOffset + PAGE_SIZE);
+
+    // Build hourly from ALL matching refs (not just risk)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let hourlyQuery = (db as any)
+      .schema("integrations")
+      .from("message_refs")
+      .select("sent_at")
+      .eq("org_id", membership.org_id)
+      .gte("sent_at", dayStart.toISOString())
+      .lt("sent_at", dayEnd.toISOString());
+    hourlyQuery = applyFilters(hourlyQuery);
+    const { data: allHourlyRefs } = (await hourlyQuery) as { data: { sent_at: string }[] | null };
+    const hourly = buildHourly(allHourlyRefs ?? [], userTimezone);
+
+    // Enrich risk page with sender/channel info
+    const items = await enrichItems(db, riskPage, analysisMap);
+
+    return NextResponse.json({
+      items,
+      hourly,
+      dateLabel,
+      totalCount: riskTotal,
+      page,
+      pageSize: PAGE_SIZE,
+      senders: senderOptions,
+      channels: channelOptions,
+    });
+  }
+
+  // ──────────────────────────────────────────────────
+  // Normal mode: efficient DB-level pagination
+  // ──────────────────────────────────────────────────
+
+  // Count total items for the day
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let countQuery = (db as any)
     .schema("integrations")
@@ -150,12 +226,10 @@ export async function GET(request: Request) {
     .eq("org_id", membership.org_id)
     .gte("sent_at", dayStart.toISOString())
     .lt("sent_at", dayEnd.toISOString());
-  if (senderId !== "all") countQuery = countQuery.eq("sender_ref_id", senderId);
-  if (channelId !== "all") countQuery = countQuery.eq("channel_ref_id", channelId);
-  if (allowedChannelIds && allowedChannelIds.length > 0) countQuery = countQuery.in("channel_ref_id", allowedChannelIds);
+  countQuery = applyFilters(countQuery);
   const { count: totalCount } = (await countQuery) as { count: number | null };
 
-  // ── Fetch ALL refs for the day (for hourly chart) — only ids + sent_at ──
+  // Fetch ALL refs for hourly chart
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let hourlyQuery = (db as any)
     .schema("integrations")
@@ -164,58 +238,24 @@ export async function GET(request: Request) {
     .eq("org_id", membership.org_id)
     .gte("sent_at", dayStart.toISOString())
     .lt("sent_at", dayEnd.toISOString());
-  if (senderId !== "all") hourlyQuery = hourlyQuery.eq("sender_ref_id", senderId);
-  if (channelId !== "all") hourlyQuery = hourlyQuery.eq("channel_ref_id", channelId);
-  if (allowedChannelIds && allowedChannelIds.length > 0) hourlyQuery = hourlyQuery.in("channel_ref_id", allowedChannelIds);
+  hourlyQuery = applyFilters(hourlyQuery);
   const { data: allRefs } = (await hourlyQuery) as { data: { sent_at: string }[] | null };
+  const hourly = buildHourly(allRefs ?? [], userTimezone);
 
-  // Build hourly distribution from ALL messages
-  const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
-  for (const ref of allRefs ?? []) {
-    let hour: number;
-    try {
-      const formatted = new Intl.DateTimeFormat("en-US", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: userTimezone,
-      }).format(new Date(ref.sent_at));
-      hour = parseInt(formatted, 10) % 24;
-    } catch {
-      hour = new Date(ref.sent_at).getUTCHours();
-    }
-    hourly[hour].count++;
-  }
-
-  // ── Fetch paginated message_refs ──
+  // Fetch paginated message_refs
   const offset = (page - 1) * PAGE_SIZE;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let refsQuery = (db as any)
     .schema("integrations")
     .from("message_refs")
-    .select(
-      "id, person_id, provider_channel_id, sent_at, channel_ref_id, sender_ref_id, permalink, content",
-    )
+    .select("id, person_id, provider_channel_id, sent_at, channel_ref_id, sender_ref_id, permalink, content")
     .eq("org_id", membership.org_id)
     .gte("sent_at", dayStart.toISOString())
     .lt("sent_at", dayEnd.toISOString());
-  if (senderId !== "all") refsQuery = refsQuery.eq("sender_ref_id", senderId);
-  if (channelId !== "all") refsQuery = refsQuery.eq("channel_ref_id", channelId);
-  if (allowedChannelIds && allowedChannelIds.length > 0) refsQuery = refsQuery.in("channel_ref_id", allowedChannelIds);
+  refsQuery = applyFilters(refsQuery);
   const { data: refs } = (await refsQuery
     .order("sent_at", { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1)) as {
-    data: {
-      id: string;
-      person_id: string | null;
-      provider_channel_id: string;
-      sent_at: string;
-      channel_ref_id: string | null;
-      sender_ref_id: string | null;
-      permalink: string | null;
-      content: string | null;
-    }[] | null;
-  };
+    .range(offset, offset + PAGE_SIZE - 1)) as { data: RefRow[] | null };
 
   if (!refs || refs.length === 0) {
     return NextResponse.json({
@@ -230,20 +270,83 @@ export async function GET(request: Request) {
     });
   }
 
-  // Fetch analyses
+  // Fetch analyses + enrich items
   const refIds = refs.map((r) => r.id);
-  const { data: analyses } = await db
-    .schema("ai")
-    .from("message_analyses")
-    .select("message_ref_id, scores")
-    .in("message_ref_id", refIds);
+  const analysisMap = await fetchAnalyses(db, refIds);
+  const items = await enrichItems(db, refs, analysisMap);
 
-  const analysisMap = new Map<string, Record<string, unknown>>();
-  for (const a of analyses ?? []) {
-    analysisMap.set(a.message_ref_id, a.scores as Record<string, unknown>);
+  return NextResponse.json({
+    items,
+    hourly,
+    dateLabel,
+    totalCount: totalCount ?? 0,
+    page,
+    pageSize: PAGE_SIZE,
+    senders: senderOptions,
+    channels: channelOptions,
+  });
+}
+
+// ── Types ──
+
+type RefRow = {
+  id: string;
+  person_id: string | null;
+  provider_channel_id: string;
+  sent_at: string;
+  channel_ref_id: string | null;
+  sender_ref_id: string | null;
+  permalink: string | null;
+  content: string | null;
+};
+
+// ── Helper: Build hourly distribution ──
+function buildHourly(refs: { sent_at: string }[], tz: string) {
+  const hourly = Array.from({ length: 24 }, (_, i) => ({ hour: i, count: 0 }));
+  for (const ref of refs) {
+    let hour: number;
+    try {
+      const formatted = new Intl.DateTimeFormat("en-US", {
+        hour: "numeric",
+        hour12: false,
+        timeZone: tz,
+      }).format(new Date(ref.sent_at));
+      hour = parseInt(formatted, 10) % 24;
+    } catch {
+      hour = new Date(ref.sent_at).getUTCHours();
+    }
+    hourly[hour].count++;
   }
+  return hourly;
+}
 
-  // Fetch external_users for sender info
+// ── Helper: Fetch analyses for a batch of ref IDs ──
+async function fetchAnalyses(
+  db: ReturnType<typeof createAdminClient>,
+  refIds: string[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const map = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < refIds.length; i += 100) {
+    const chunk = refIds.slice(i, i + 100);
+    const { data } = await db
+      .schema("ai")
+      .from("message_analyses")
+      .select("message_ref_id, scores")
+      .in("message_ref_id", chunk);
+    for (const a of data ?? []) {
+      map.set(a.message_ref_id, a.scores as Record<string, unknown>);
+    }
+  }
+  return map;
+}
+
+// ── Helper: Enrich refs with sender/channel info + build response items ──
+async function enrichItems(
+  db: ReturnType<typeof createAdminClient>,
+  refs: RefRow[],
+  analysisMap: Map<string, Record<string, unknown>>,
+) {
+  // Fetch sender info
   const senderRefIds = [...new Set(refs.map((r) => r.sender_ref_id).filter((id): id is string => !!id))];
   const senderMap = new Map<string, { display_name: string; avatar_url: string | null }>();
   if (senderRefIds.length > 0) {
@@ -257,7 +360,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // Fetch external_channels for channel info
+  // Fetch channel info
   const channelRefIds = [...new Set(refs.map((r) => r.channel_ref_id).filter((id): id is string => !!id))];
   const channelMap = new Map<string, string>();
   if (channelRefIds.length > 0) {
@@ -271,8 +374,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // Build items
-  const items = refs.map((ref) => {
+  return refs.map((ref) => {
     const scores = analysisMap.get(ref.id) ?? {};
     const sender = ref.sender_ref_id ? senderMap.get(ref.sender_ref_id) : null;
     const channelName = ref.channel_ref_id ? channelMap.get(ref.channel_ref_id) : null;
@@ -293,22 +395,10 @@ export async function GET(request: Request) {
       ),
     };
   });
-
-  return NextResponse.json({
-    items,
-    hourly,
-    dateLabel,
-    totalCount: totalCount ?? 0,
-    page,
-    pageSize: PAGE_SIZE,
-    senders: senderOptions,
-    channels: channelOptions,
-  });
 }
 
-/**
- * Calculate UTC boundaries for "today" in a given timezone.
- */
+// ── Date helpers ──
+
 function getTodayBounds(tz: string) {
   try {
     const now = new Date();
@@ -327,19 +417,12 @@ function getTodayBounds(tz: string) {
   }
 }
 
-/**
- * Calculate UTC boundaries for a specific date (YYYY-MM-DD) in a given timezone.
- */
 function getDateBounds(dateStr: string, tz: string) {
   try {
-    // Parse the date
     const [y, mo, d] = dateStr.split("-").map(Number);
     if (!y || !mo || !d) throw new Error("invalid date");
 
-    // Create a reference point at noon UTC on that date (to avoid DST edge cases)
     const noonUtc = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
-
-    // Find the time-of-day at noonUtc in the target timezone
     const parts = new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
       minute: "numeric",
@@ -350,15 +433,11 @@ function getDateBounds(dateStr: string, tz: string) {
 
     const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "12") % 24;
     const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
-
-    // Offset = localTime - utcTime (in minutes)
     const offsetMinutes = (h * 60 + m) - (12 * 60);
 
-    // Midnight in user's TZ = YYYY-MM-DDT00:00 (local) = that timestamp in UTC
     const midnightUtc = new Date(Date.UTC(y, mo - 1, d, 0, 0, 0) - offsetMinutes * 60 * 1000);
     const endUtc = new Date(midnightUtc.getTime() + 24 * 60 * 60 * 1000);
 
-    // Format label
     const labelDate = new Date(Date.UTC(y, mo - 1, d, 12, 0, 0));
     const dateLabel = new Intl.DateTimeFormat("ja-JP", {
       year: "numeric",
@@ -370,7 +449,6 @@ function getDateBounds(dateStr: string, tz: string) {
 
     return { dayStart: midnightUtc, dayEnd: endUtc, dateLabel };
   } catch {
-    // Fallback
     const [y, mo, d] = dateStr.split("-").map(Number);
     const dayStart = new Date(Date.UTC(y || 2026, (mo || 1) - 1, d || 1));
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);

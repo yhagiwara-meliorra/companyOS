@@ -98,6 +98,7 @@ export function ActivityFeed() {
   const [page, setPage] = useState(1);
   const [senderId, setSenderId] = useState("all");
   const [channelId, setChannelId] = useState("all");
+  const [riskOnly, setRiskOnly] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -106,6 +107,7 @@ export function ActivityFeed() {
       const params = new URLSearchParams({ tz, date: selectedDate, page: String(page) });
       if (senderId !== "all") params.set("senderId", senderId);
       if (channelId !== "all") params.set("channelId", channelId);
+      if (riskOnly) params.set("riskOnly", "true");
       const res = await fetch(`/api/activity/recent?${params}`);
       if (res.ok) {
         const json = await res.json();
@@ -116,7 +118,7 @@ export function ActivityFeed() {
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, page, senderId, channelId]);
+  }, [selectedDate, page, senderId, channelId, riskOnly]);
 
   useEffect(() => {
     fetchData();
@@ -155,6 +157,11 @@ export function ActivityFeed() {
 
   function handleChannelChange(newChannelId: string) {
     setChannelId(newChannelId);
+    setPage(1);
+  }
+
+  function handleRiskToggle() {
+    setRiskOnly((prev) => !prev);
     setPage(1);
   }
 
@@ -235,61 +242,72 @@ export function ActivityFeed() {
       </div>
 
       {/* Filter bar */}
-      {(data?.senders?.length ?? 0) > 0 || (data?.channels?.length ?? 0) > 0 ? (
-        <div className="flex flex-wrap items-center gap-3">
-          {(data?.senders?.length ?? 0) > 0 && (
-            <div className="flex items-center gap-1.5">
-              <label htmlFor="sender-filter" className="text-xs font-medium text-slate-500">
-                送信者
-              </label>
-              <select
-                id="sender-filter"
-                value={senderId}
-                onChange={(e) => handleSenderChange(e.target.value)}
-                className="rounded-md border border-border-light bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              >
-                <option value="all">全員</option>
-                {data?.senders.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {(data?.channels?.length ?? 0) > 0 && (
-            <div className="flex items-center gap-1.5">
-              <label htmlFor="channel-filter" className="text-xs font-medium text-slate-500">
-                チャンネル
-              </label>
-              <select
-                id="channel-filter"
-                value={channelId}
-                onChange={(e) => handleChannelChange(e.target.value)}
-                className="rounded-md border border-border-light bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              >
-                <option value="all">すべて</option>
-                {data?.channels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.channelName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {(senderId !== "all" || channelId !== "all") && (
-            <button
-              type="button"
-              onClick={() => { setSenderId("all"); setChannelId("all"); setPage(1); }}
-              className="text-xs text-slate-400 hover:text-slate-600"
+      <div className="flex flex-wrap items-center gap-3">
+        {(data?.senders?.length ?? 0) > 0 && (
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="sender-filter" className="text-xs font-medium text-slate-500">
+              送信者
+            </label>
+            <select
+              id="sender-filter"
+              value={senderId}
+              onChange={(e) => handleSenderChange(e.target.value)}
+              className="rounded-md border border-border-light bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
-              フィルター解除
-            </button>
-          )}
-        </div>
-      ) : null}
+              <option value="all">全員</option>
+              {data?.senders.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.displayName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {(data?.channels?.length ?? 0) > 0 && (
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="channel-filter" className="text-xs font-medium text-slate-500">
+              チャンネル
+            </label>
+            <select
+              id="channel-filter"
+              value={channelId}
+              onChange={(e) => handleChannelChange(e.target.value)}
+              className="rounded-md border border-border-light bg-white px-2.5 py-1.5 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="all">すべて</option>
+              {data?.channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #{c.channelName}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Harassment risk toggle */}
+        <button
+          type="button"
+          onClick={handleRiskToggle}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            riskOnly
+              ? "bg-red-600 text-white hover:bg-red-700"
+              : "border border-red-200 text-red-600 hover:bg-red-50"
+          }`}
+        >
+          {riskOnly ? "⚠ ハラスメントリスクのみ" : "⚠ ハラスメントリスク"}
+        </button>
+
+        {(senderId !== "all" || channelId !== "all" || riskOnly) && (
+          <button
+            type="button"
+            onClick={() => { setSenderId("all"); setChannelId("all"); setRiskOnly(false); setPage(1); }}
+            className="text-xs text-slate-400 hover:text-slate-600"
+          >
+            フィルター解除
+          </button>
+        )}
+      </div>
 
       {loading ? (
         <div className="animate-pulse space-y-4">
@@ -315,10 +333,26 @@ export function ActivityFeed() {
           {data && data.items.length > 0 ? (
             <>
               <div className="space-y-3">
-                {data.items.map((item) => (
+                {data.items.map((item) => {
+                  // Check if item has risk-level scores
+                  const toneVal = (() => {
+                    const v = item.scores.tone_score;
+                    return typeof v === "number" ? v : typeof v === "object" && v !== null && "value" in v ? (v as { value: number }).value : null;
+                  })();
+                  const polVal = (() => {
+                    const v = item.scores.politeness_score;
+                    return typeof v === "number" ? v : typeof v === "object" && v !== null && "value" in v ? (v as { value: number }).value : null;
+                  })();
+                  const isRisk = (toneVal !== null && toneVal <= 0.3) || (polVal !== null && polVal <= 0.3);
+
+                  return (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-border-light bg-surface-raised p-4"
+                    className={`rounded-xl border p-4 ${
+                      isRisk
+                        ? "border-red-200 bg-red-50/50"
+                        : "border-border-light bg-surface-raised"
+                    }`}
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
@@ -389,7 +423,8 @@ export function ActivityFeed() {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Pagination */}

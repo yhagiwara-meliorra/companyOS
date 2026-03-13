@@ -12,6 +12,14 @@ interface RefreshResult {
   errors: string[];
   error?: string;
   message?: string;
+  debug?: {
+    authTeamId?: string;
+    authTeam?: string;
+    dbTeamId?: string;
+    tokenPrefix?: string;
+    staleUserIds?: string[];
+    staleChannelIds?: string[];
+  };
 }
 
 export function RefreshNamesButton() {
@@ -98,6 +106,16 @@ export function RefreshNamesButton() {
                   <li key={i}>{e}</li>
                 ))}
               </ul>
+            </details>
+          )}
+          {result.debug && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-slate-400 hover:text-slate-600">
+                デバッグ情報
+              </summary>
+              <pre className="mt-1 overflow-auto rounded bg-slate-50 p-2 font-mono text-[10px] text-slate-500">
+                {JSON.stringify(result.debug, null, 2)}
+              </pre>
             </details>
           )}
         </div>

@@ -62,9 +62,10 @@ export async function POST() {
 
   const slack = new SlackClient(installation.bot_token);
 
-  // Verify bot token is valid
+  // Verify bot token is valid and gather debug info
+  let authInfo: { team_id?: string; team?: string; user_id?: string; bot_id?: string } = {};
   try {
-    await slack.apiCall("auth.test");
+    authInfo = await slack.apiCall<typeof authInfo>("auth.test");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({
@@ -192,6 +193,14 @@ export async function POST() {
     totalStaleUsers: staleUsers?.length ?? 0,
     totalStaleChannels: channelsToRefresh.length,
     errors,
+    debug: {
+      authTeamId: authInfo.team_id,
+      authTeam: authInfo.team,
+      dbTeamId: installation.provider_team_id,
+      tokenPrefix: installation.bot_token?.substring(0, 15) + "...",
+      staleUserIds: (staleUsers ?? []).map((u) => u.provider_user_id),
+      staleChannelIds: channelsToRefresh.map((c) => c.provider_channel_id),
+    },
   });
 }
 

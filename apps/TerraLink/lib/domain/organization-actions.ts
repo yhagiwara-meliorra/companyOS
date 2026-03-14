@@ -214,6 +214,9 @@ export async function updateOrgLink(
 import { parseCsv, validateHeaders, chunk, type CsvRow } from "@/lib/csv";
 
 const BATCH_SIZE = 200;
+const VALID_ORG_TYPES = new Set([
+  "buyer", "supplier", "customer", "partner", "logistics", "internal",
+]);
 
 export type ImportState = {
   error?: string;
@@ -225,111 +228,130 @@ export type ImportState = {
 
 export async function importOrganizationsCsv(
   workspaceSlug: string,
-  _prev: ActionState,
+  _prev: ImportState,
   formData: FormData
 ): Promise<ImportState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "認証されていません。ログインしてください。" };
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "認証されていません。ログインしてください。" };
 
-  const file = formData.get("file") as File | null;
-  if (!file) return { error: "ファイルが選択されていません" };
-  if (file.size > 10 * 1024 * 1024) return { error: "ファイルサイズが大きすぎます（上限 10 MB）" };
+    const file = formData.get("file") as File | null;
+    if (!file) return { error: "ファイルが選択されていません" };
+    if (file.size > 10 * 1024 * 1024) return { error: "ファイルサイズが大きすぎます（上限 10 MB）" };
 
-  const text = await file.text();
-  const { headers, rows } = parseCsv(text);
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
 
-  if (rows.length === 0) return { error: "CSVにデータ行がありません" };
+    if (rows.length === 0) return { error: "CSVにデータ行がありません" };
 
-  const missing = validateHeaders(headers, ["legal_name", "display_name", "org_type"]);
-  if (missing.length > 0)
-    return { error: `必須カラムが不足しています: ${missing.join(", ")}` };
+    const missing = validateHeaders(headers, ["legal_name", "display_name", "org_type"]);
+    if (missing.length > 0)
+      return { error: `必須カラムが不足しています: ${missing.join(", ")}` };
 
-  const admin = createAdminClient();
-  const { data: ws } = await admin
-    .from("workspaces")
-    .select("id")
-    .eq("slug", workspaceSlug)
-    .is("deleted_at", null)
-    .single();
-  if (!ws) return { error: "ワークスペースが見つかりません" };
-
-  let imported = 0;
-  let failed = 0;
-  const errors: string[] = [];
-  const chunks = chunk(rows, BATCH_SIZE);
-
-  for (let ci = 0; ci < chunks.length; ci++) {
-    const batch = chunks[ci];
-    const batchOffset = ci * BATCH_SIZE + 2; // +2 = header row + 1-indexed
-
-    // 1. Validate & build insert payloads
-    const orgPayloads = batch.map((row) => ({
-      legal_name: row.legal_name || "Unnamed",
-      display_name: row.display_name || row.legal_name || "Unnamed",
-      org_type: row.org_type || "supplier",
-      country_code: row.country_code || null,
-      website: row.website || null,
-    }));
-
-    // 2. Batch insert organizations
-    const { data: insertedOrgs, error: orgErr } = await admin
-      .from("organizations")
-      .insert(orgPayloads)
-      .select("id");
-
-    if (orgErr || !insertedOrgs) {
-      // If the whole batch fails, try row-by-row fallback for this chunk
-      const rowResults = await insertOrgRowByRow(admin, batch, ws.id, batchOffset);
-      imported += rowResults.imported;
-      failed += rowResults.failed;
-      errors.push(...rowResults.errors);
-      continue;
+    // Pre-validate org_type values against DB CHECK constraint
+    const invalidRows: string[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const orgType = (rows[i].org_type || "").trim().toLowerCase();
+      if (orgType && !VALID_ORG_TYPES.has(orgType)) {
+        invalidRows.push(`行${i + 2}: org_type="${rows[i].org_type}"は無効です（有効値: ${[...VALID_ORG_TYPES].join(", ")}）`);
+      }
+    }
+    if (invalidRows.length > 0) {
+      return { error: invalidRows.slice(0, 5).join("\n") };
     }
 
-    // 3. Batch insert workspace_organizations links
-    const linkPayloads = insertedOrgs.map((org, idx) => ({
-      workspace_id: ws.id,
-      organization_id: org.id,
-      relationship_role: batch[idx].org_type === "buyer" ? "buyer" as const : "supplier" as const,
-      status: "active" as const,
-      verification_status: "declared" as const,
-    }));
+    const admin = createAdminClient();
+    const { data: ws } = await admin
+      .from("workspaces")
+      .select("id")
+      .eq("slug", workspaceSlug)
+      .is("deleted_at", null)
+      .single();
+    if (!ws) return { error: "ワークスペースが見つかりません" };
 
-    const { error: linkErr } = await admin
-      .from("workspace_organizations")
-      .insert(linkPayloads);
+    let imported = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    const chunks = chunk(rows, BATCH_SIZE);
 
-    if (linkErr) {
-      errors.push(`Chunk ${ci + 1}: link error — ${linkErr.message}`);
-      // Orgs were created but links failed; count as partial success
-      imported += insertedOrgs.length;
-      failed += 0;
-    } else {
-      imported += insertedOrgs.length;
+    for (let ci = 0; ci < chunks.length; ci++) {
+      const batch = chunks[ci];
+      const batchOffset = ci * BATCH_SIZE + 2; // +2 = header row + 1-indexed
+
+      // 1. Validate & build insert payloads
+      const orgPayloads = batch.map((row) => ({
+        legal_name: row.legal_name || "Unnamed",
+        display_name: row.display_name || row.legal_name || "Unnamed",
+        org_type: row.org_type?.trim().toLowerCase() || "supplier",
+        country_code: row.country_code?.trim() || null,
+        website: row.website?.trim() || null,
+      }));
+
+      // 2. Batch insert organizations
+      const { data: insertedOrgs, error: orgErr } = await admin
+        .from("organizations")
+        .insert(orgPayloads)
+        .select("id");
+
+      if (orgErr || !insertedOrgs) {
+        // If the whole batch fails, try row-by-row fallback for this chunk
+        console.error(`[CSV Import] Batch ${ci + 1} failed:`, orgErr?.message);
+        const rowResults = await insertOrgRowByRow(admin, batch, ws.id, batchOffset);
+        imported += rowResults.imported;
+        failed += rowResults.failed;
+        errors.push(...rowResults.errors);
+        continue;
+      }
+
+      // 3. Batch insert workspace_organizations links
+      const linkPayloads = insertedOrgs.map((org, idx) => ({
+        workspace_id: ws.id,
+        organization_id: org.id,
+        relationship_role: batch[idx].org_type?.trim().toLowerCase() === "buyer" ? "buyer" as const : "supplier" as const,
+        status: "active" as const,
+        verification_status: "declared" as const,
+      }));
+
+      const { error: linkErr } = await admin
+        .from("workspace_organizations")
+        .insert(linkPayloads);
+
+      if (linkErr) {
+        console.error(`[CSV Import] Link batch ${ci + 1} failed:`, linkErr.message);
+        errors.push(`リンクエラー: ${linkErr.message}`);
+        // Orgs were created but links failed; count as partial success
+        imported += insertedOrgs.length;
+        failed += 0;
+      } else {
+        imported += insertedOrgs.length;
+      }
     }
-  }
 
-  if (imported > 0) {
-    await appendChangeLog(ws.id, user.id, "organizations", ws.id, "insert", null, {
-      action: "csv_import",
-      imported,
-      failed,
-      total: rows.length,
-    });
-  }
+    if (imported > 0) {
+      await appendChangeLog(ws.id, user.id, "organizations", ws.id, "insert", null, {
+        action: "csv_import",
+        imported,
+        failed,
+        total: rows.length,
+      });
+    }
 
-  revalidatePath(`/app/${workspaceSlug}/orgs`);
+    revalidatePath(`/app/${workspaceSlug}/orgs`);
 
-  if (errors.length > 0) {
-    return {
-      error: `${imported}/${rows.length}件インポート済み。${errors.length}件のエラー: ${errors.slice(0, 3).join("; ")}`,
-      imported,
-      failed,
-      total: rows.length,
-    };
+    if (errors.length > 0) {
+      return {
+        error: `${imported}/${rows.length}件インポート。エラー: ${errors.slice(0, 3).join("; ")}`,
+        imported,
+        failed,
+        total: rows.length,
+      };
+    }
+    return { success: true, imported, total: rows.length };
+  } catch (e) {
+    console.error("[CSV Import] Unexpected error:", e);
+    return { error: `サーバーエラー: ${e instanceof Error ? e.message : String(e)}` };
   }
-  return { success: true, imported, total: rows.length };
 }
 
 /** Fallback: insert rows one-by-one when a batch insert fails */
@@ -346,32 +368,44 @@ async function insertOrgRowByRow(
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = startRowNum + i;
+    const orgType = row.org_type?.trim().toLowerCase() || "supplier";
+
+    if (!VALID_ORG_TYPES.has(orgType)) {
+      errors.push(`行${rowNum}: org_type="${row.org_type}"は無効`);
+      failed++;
+      continue;
+    }
 
     const { data: org, error: orgErr } = await admin
       .from("organizations")
       .insert({
         legal_name: row.legal_name || "Unnamed",
         display_name: row.display_name || row.legal_name || "Unnamed",
-        org_type: row.org_type || "supplier",
-        country_code: row.country_code || null,
-        website: row.website || null,
+        org_type: orgType,
+        country_code: row.country_code?.trim() || null,
+        website: row.website?.trim() || null,
       })
       .select("id")
       .single();
 
     if (orgErr || !org) {
-      errors.push(`Row ${rowNum}: ${orgErr?.message ?? "Failed"}`);
+      errors.push(`行${rowNum}: ${orgErr?.message ?? "作成失敗"}`);
       failed++;
       continue;
     }
 
-    await admin.from("workspace_organizations").insert({
+    const { error: linkErr } = await admin.from("workspace_organizations").insert({
       workspace_id: workspaceId,
       organization_id: org.id,
-      relationship_role: row.org_type === "buyer" ? "buyer" : "supplier",
+      relationship_role: orgType === "buyer" ? "buyer" : "supplier",
       status: "active",
       verification_status: "declared",
     });
+
+    if (linkErr) {
+      errors.push(`行${rowNum}: リンク失敗 — ${linkErr.message}`);
+      // org was created, count as partial
+    }
 
     imported++;
   }

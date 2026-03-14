@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useActionState } from "react";
+import { useRef, useActionState, useState } from "react";
 import { importOrganizationsCsv } from "@/lib/domain/organization-actions";
 import type { ImportState } from "@/lib/domain/organization-actions";
 import { Button } from "@/components/ui/button";
-import { Upload, Download, CheckCircle2 } from "lucide-react";
+import { Upload, Download, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 
 const ORG_CSV_TEMPLATE =
-  "legal_name,display_name,org_type,country_code,website\nサンプル株式会社,サンプル,supplier,JPN,https://example.com\n";
+  "legal_name,display_name,org_type,country_code,website\nサンプル株式会社,サンプル,supplier,JP,https://example.com\nサンプルバイヤー,Sample Buyer,buyer,DE,https://buyer.example.com\n";
 
 function downloadTemplate() {
   const bom = "\uFEFF";
@@ -28,6 +28,7 @@ export function OrgCsvImportForm({
   workspaceSlug: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [showDetail, setShowDetail] = useState(false);
   const boundAction = importOrganizationsCsv.bind(null, workspaceSlug);
   const [state, action, pending] = useActionState<ImportState, FormData>(
     boundAction,
@@ -35,49 +36,66 @@ export function OrgCsvImportForm({
   );
 
   return (
-    <form action={action} className="inline-flex items-center gap-2">
-      <input
-        ref={fileRef}
-        type="file"
-        name="file"
-        accept=".csv"
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files?.length) {
-            e.target.form?.requestSubmit();
-          }
-        }}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={downloadTemplate}
-      >
-        <Download className="mr-2 h-3.5 w-3.5" />
-        テンプレート
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={pending}
-        onClick={() => fileRef.current?.click()}
-      >
-        <Upload className="mr-2 h-3.5 w-3.5" />
-        {pending ? "インポート中..." : "CSV インポート"}
-      </Button>
+    <div className="inline-flex flex-col items-end gap-1">
+      <form action={action} className="inline-flex items-center gap-2">
+        <input
+          ref={fileRef}
+          type="file"
+          name="file"
+          accept=".csv"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) {
+              e.target.form?.requestSubmit();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={downloadTemplate}
+        >
+          <Download className="mr-2 h-3.5 w-3.5" />
+          テンプレート
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => fileRef.current?.click()}
+        >
+          <Upload className="mr-2 h-3.5 w-3.5" />
+          {pending ? "インポート中..." : "CSV インポート"}
+        </Button>
+      </form>
       {state.error && (
-        <span className="text-xs text-red-600 max-w-xs truncate" title={state.error}>
-          {state.error}
-        </span>
+        <div className="max-w-sm text-right">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-red-600"
+            onClick={() => setShowDetail(!showDetail)}
+          >
+            <AlertCircle className="h-3 w-3 shrink-0" />
+            <span className="truncate max-w-[200px]">{state.error.split("\n")[0]}</span>
+            {state.error.includes("\n") && (
+              showDetail ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+            )}
+          </button>
+          {showDetail && (
+            <pre className="mt-1 whitespace-pre-wrap text-left text-[11px] text-red-600 bg-red-50 rounded p-2 max-h-32 overflow-auto">
+              {state.error}
+            </pre>
+          )}
+        </div>
       )}
       {state.success && (
         <span className="inline-flex items-center gap-1 text-xs text-green-600">
           <CheckCircle2 className="h-3 w-3" />
-          {state.imported}件インポート
+          {state.imported}件インポート完了
         </span>
       )}
-    </form>
+    </div>
   );
 }

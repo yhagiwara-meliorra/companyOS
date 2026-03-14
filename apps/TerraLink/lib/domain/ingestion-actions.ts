@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 import { z } from "zod/v4";
 
 export type ActionState = { error?: string; success?: boolean; runId?: string };
@@ -97,6 +98,10 @@ export async function triggerIngestion(
   });
 
   if (error) return { error: error.message };
+
+  await appendChangeLog(ws.id, user.id, "ingestion_runs", runId as string, "trigger_ingestion", null, {
+    data_source_id: dataSourceId,
+  });
 
   revalidatePath(`/app/${workspaceSlug}/sources`);
   return { success: true, runId: runId as string };
@@ -203,6 +208,12 @@ export async function runSampleIngestion(
         },
       })
       .eq("id", run.id);
+
+    await appendChangeLog(ws.id, user.id, "ingestion_runs", run.id, "run_sample_ingestion", null, {
+      data_source_id: dataSourceId,
+      observations_loaded: observations.length,
+      intersections_found: intersectionCount ?? 0,
+    });
 
     revalidatePath(`/app/${workspaceSlug}/sources`);
     return { success: true, runId: run.id };

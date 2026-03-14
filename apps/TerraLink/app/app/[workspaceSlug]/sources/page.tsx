@@ -22,6 +22,7 @@ import {
 import { Database, Layers, CheckCircle2, XCircle, Clock, Play } from "lucide-react";
 import { IngestionTriggerButton } from "./ingestion-trigger-button";
 import { RUN_STATUS_LABELS, DATA_SOURCE_CATEGORY_LABELS } from "@/lib/labels";
+import { canEdit } from "@/lib/auth/roles";
 
 const STATUS_ICON: Record<string, React.ReactNode> = {
   queued: <Clock className="h-3.5 w-3.5 text-yellow-500" />,
@@ -106,6 +107,7 @@ export default async function SourcesPage({
 
   const sourceList = sources ?? [];
   const runList = runs ?? [];
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   return (
     <div className="space-y-6">
@@ -158,11 +160,13 @@ export default async function SourcesPage({
                     {ds.access_mode}
                   </Badge>
                 </div>
-                <IngestionTriggerButton
-                  workspaceSlug={workspaceSlug}
-                  dataSourceId={ds.id}
-                  sourceName={ds.source_name}
-                />
+                {hasEditAccess && (
+                  <IngestionTriggerButton
+                    workspaceSlug={workspaceSlug}
+                    dataSourceId={ds.id}
+                    sourceName={ds.source_name}
+                  />
+                )}
               </CardContent>
             </Card>
           ))}

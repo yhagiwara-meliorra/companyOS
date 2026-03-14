@@ -35,6 +35,7 @@ type Props = {
   evidenceId: string;
   storagePath: string;
   currentVisibility: string;
+  canEdit?: boolean;
 };
 
 export function EvidenceActions({
@@ -42,29 +43,43 @@ export function EvidenceActions({
   evidenceId,
   storagePath,
   currentVisibility,
+  canEdit = false,
 }: Props) {
   const [isPending, startTransition] = useTransition();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function handleDownload() {
+    setError(null);
     startTransition(async () => {
       const res = await getEvidenceUrl(storagePath);
       if (res.url) {
         window.open(res.url, "_blank");
+      } else {
+        setError("ダウンロードURLの取得に失敗しました");
       }
     });
   }
 
   function handleVisibilityChange(visibility: string) {
+    setError(null);
     startTransition(async () => {
-      await updateEvidenceVisibility(workspaceSlug, evidenceId, visibility);
+      const res = await updateEvidenceVisibility(workspaceSlug, evidenceId, visibility);
+      if (res && "error" in res) {
+        setError("公開範囲の変更に失敗しました");
+      }
     });
   }
 
   function handleDelete() {
+    setError(null);
     startTransition(async () => {
-      await deleteEvidence(workspaceSlug, evidenceId);
-      setConfirmOpen(false);
+      const res = await deleteEvidence(workspaceSlug, evidenceId);
+      if (res && "error" in res) {
+        setError("削除に失敗しました");
+      } else {
+        setConfirmOpen(false);
+      }
     });
   }
 
@@ -77,6 +92,7 @@ export function EvidenceActions({
             size="sm"
             className="h-7 w-7 p-0"
             disabled={isPending}
+            aria-label="アクションメニュー"
           >
             {isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -90,41 +106,51 @@ export function EvidenceActions({
             <Download className="mr-2 h-3.5 w-3.5" />
             ダウンロード
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          {currentVisibility !== "shared_to_buyers" && (
-            <DropdownMenuItem
-              onClick={() => handleVisibilityChange("shared_to_buyers")}
-            >
-              <Share2 className="mr-2 h-3.5 w-3.5" />
-              バイヤーに共有
-            </DropdownMenuItem>
+          {canEdit && (
+            <>
+              <DropdownMenuSeparator />
+              {currentVisibility !== "shared_to_buyers" && (
+                <DropdownMenuItem
+                  onClick={() => handleVisibilityChange("shared_to_buyers")}
+                >
+                  <Share2 className="mr-2 h-3.5 w-3.5" />
+                  バイヤーに共有
+                </DropdownMenuItem>
+              )}
+              {currentVisibility !== "workspace_private" && (
+                <DropdownMenuItem
+                  onClick={() => handleVisibilityChange("workspace_private")}
+                >
+                  <EyeOff className="mr-2 h-3.5 w-3.5" />
+                  非公開にする
+                </DropdownMenuItem>
+              )}
+              {currentVisibility !== "org_private" && (
+                <DropdownMenuItem
+                  onClick={() => handleVisibilityChange("org_private")}
+                >
+                  <Eye className="mr-2 h-3.5 w-3.5" />
+                  組織限定
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setConfirmOpen(true)}
+                className="text-red-600 focus:text-red-600"
+              >
+                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                削除
+              </DropdownMenuItem>
+            </>
           )}
-          {currentVisibility !== "workspace_private" && (
-            <DropdownMenuItem
-              onClick={() => handleVisibilityChange("workspace_private")}
-            >
-              <EyeOff className="mr-2 h-3.5 w-3.5" />
-              非公開にする
-            </DropdownMenuItem>
-          )}
-          {currentVisibility !== "org_private" && (
-            <DropdownMenuItem
-              onClick={() => handleVisibilityChange("org_private")}
-            >
-              <Eye className="mr-2 h-3.5 w-3.5" />
-              組織限定
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => setConfirmOpen(true)}
-            className="text-red-600 focus:text-red-600"
-          >
-            <Trash2 className="mr-2 h-3.5 w-3.5" />
-            削除
-          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {error && (
+        <p className="mt-1 text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

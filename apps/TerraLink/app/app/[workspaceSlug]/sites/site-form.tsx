@@ -85,17 +85,18 @@ export function SiteForm({
               <select
                 id="siteType"
                 name="siteType"
-                defaultValue={site?.site_type ?? "other"}
+                defaultValue={site?.site_type ?? "unknown"}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="farm">農場</option>
-                <option value="plantation">プランテーション</option>
                 <option value="factory">工場</option>
                 <option value="warehouse">倉庫</option>
                 <option value="port">港</option>
                 <option value="mine">鉱山</option>
                 <option value="office">オフィス</option>
-                <option value="other">その他</option>
+                <option value="project_site">プロジェクトサイト</option>
+                <option value="store">店舗</option>
+                <option value="unknown">不明</option>
               </select>
             </div>
           </div>

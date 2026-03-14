@@ -21,6 +21,7 @@ import type {
 } from "./page";
 
 type Props = {
+  canEdit?: boolean;
   workspaceSlug: string;
   assessments: AssessmentRow[];
   activeAssessment: AssessmentRow | undefined;
@@ -47,6 +48,7 @@ const TABS = [
 ] as const;
 
 export function LeapTabs({
+  canEdit = false,
   workspaceSlug,
   assessments,
   activeAssessment,
@@ -67,6 +69,7 @@ export function LeapTabs({
   return (
     <div className="space-y-6">
       <AssessmentHeader
+        canEdit={canEdit}
         workspaceSlug={workspaceSlug}
         assessments={assessments}
         activeAssessment={activeAssessment}
@@ -92,6 +95,7 @@ export function LeapTabs({
 
           <TabsContent value="locate" className="space-y-4">
             <LocateTab
+              canEdit={canEdit}
               workspaceSlug={workspaceSlug}
               assessmentId={activeAssessment.id}
               scopes={scopes}
@@ -105,6 +109,7 @@ export function LeapTabs({
 
           <TabsContent value="evaluate" className="space-y-4">
             <EvaluateTab
+              canEdit={canEdit}
               workspaceSlug={workspaceSlug}
               scopes={scopes}
               dependencies={dependencies}
@@ -117,6 +122,7 @@ export function LeapTabs({
 
           <TabsContent value="assess" className="space-y-4">
             <AssessTab
+              canEdit={canEdit}
               workspaceSlug={workspaceSlug}
               scopes={scopes}
               risks={risks}
@@ -128,6 +134,7 @@ export function LeapTabs({
 
           <TabsContent value="prepare" className="space-y-4">
             <PrepareTab
+              canEdit={canEdit}
               workspaceSlug={workspaceSlug}
               assessmentId={activeAssessment.id}
               disclosures={disclosures}

@@ -1,0 +1,7 @@
+country_of_production,latitude,longitude,area_ha,region,production_start_date,production_end_date,plot_reference,geolocation_type
+ID,-0.0210,109.3420,65.0,West Kalimantan,2025-01-01,2025-12-31,ID-PALM-001,polygon
+ID,-0.0350,109.3590,48.0,West Kalimantan,2025-01-01,2025-12-31,ID-PALM-002,polygon
+ID,-0.0480,109.3280,72.0,West Kalimantan,2025-03-01,2026-02-28,ID-PALM-003,polygon
+ID,-1.2310,113.9840,55.0,Central Kalimantan,2025-01-01,2025-12-31,ID-PALM-004,polygon
+ID,-1.2450,113.9710,90.0,Central Kalimantan,2025-01-01,2025-12-31,ID-PALM-005,polygon
+ID,-1.2590,114.0020,38.0,Central Kalimantan,2025-06-01,2026-05-31,ID-PALM-006,polygon

@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
+
+export { appendChangeLog };
 
 export type ActionState = { error?: string; success?: boolean };
 
@@ -24,30 +27,6 @@ async function resolveWorkspace(admin: ReturnType<typeof createAdminClient>, slu
     .is("deleted_at", null)
     .single();
   return ws;
-}
-
-// ── Change Log ──────────────────────────────────────────────
-// Append-only audit logger. Called internally by other actions.
-
-export async function appendChangeLog(
-  workspaceId: string,
-  userId: string,
-  targetTable: string,
-  targetId: string,
-  action: string,
-  beforeState?: Record<string, unknown> | null,
-  afterState?: Record<string, unknown> | null
-) {
-  const admin = createAdminClient();
-  await admin.from("change_log").insert({
-    workspace_id: workspaceId,
-    actor_user_id: userId,
-    target_table: targetTable,
-    target_id: targetId,
-    action,
-    before_state: beforeState ?? null,
-    after_state: afterState ?? null,
-  });
 }
 
 // ── Upload Evidence ─────────────────────────────────────────

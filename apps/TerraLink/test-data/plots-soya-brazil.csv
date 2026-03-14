@@ -1,0 +1,8 @@
+country_of_production,latitude,longitude,area_ha,region,production_start_date,production_end_date,plot_reference,geolocation_type
+BR,-12.6501,-55.3180,85.0,Mato Grosso,2025-09-01,2026-02-28,BR-SOY-001,polygon
+BR,-12.6620,-55.3340,120.0,Mato Grosso,2025-09-01,2026-02-28,BR-SOY-002,polygon
+BR,-12.6780,-55.3050,45.0,Mato Grosso,2025-10-01,2026-03-31,BR-SOY-003,polygon
+BR,-12.7010,-55.2890,200.0,Mato Grosso,2025-09-15,2026-03-15,BR-SOY-004,polygon
+BR,-12.6430,-55.3510,150.0,Mato Grosso,2025-09-01,2026-02-28,BR-SOY-005,polygon
+BR,-11.8590,-55.5010,95.0,Mato Grosso,2025-10-01,2026-03-31,BR-SOY-006,polygon
+BR,-11.8720,-55.4880,180.0,Mato Grosso,2025-09-01,2026-03-15,BR-SOY-007,polygon

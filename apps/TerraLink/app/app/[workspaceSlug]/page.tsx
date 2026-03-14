@@ -31,7 +31,6 @@ import {
   TrendingUp,
   CheckCircle2,
   Clock,
-  XCircle,
   ChevronRight,
   BarChart3,
   Globe,

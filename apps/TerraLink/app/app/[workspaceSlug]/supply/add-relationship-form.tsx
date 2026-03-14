@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus } from "lucide-react";
 
-type Org = { id: string; display_name: string };
+type Org = { wsOrgId: string; name: string };
 
 export function AddRelationshipForm({
   workspaceSlug,
@@ -19,39 +19,57 @@ export function AddRelationshipForm({
   const boundAction = createSupplyRelationship.bind(null, workspaceSlug);
   const [state, action, pending] = useActionState(boundAction, {});
 
+  const selectClass =
+    "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
   return (
     <form action={action} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="space-y-2">
-          <Label htmlFor="buyerOrgId">バイヤー</Label>
+          <Label htmlFor="fromWsOrgId">From 組織</Label>
           <select
-            id="buyerOrgId"
-            name="buyerOrgId"
+            id="fromWsOrgId"
+            name="fromWsOrgId"
             required
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className={selectClass}
           >
-            <option value="">バイヤーを選択...</option>
+            <option value="">組織を選択...</option>
             {orgs.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.display_name}
+              <option key={org.wsOrgId} value={org.wsOrgId}>
+                {org.name}
               </option>
             ))}
           </select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="supplierOrgId">サプライヤー</Label>
+          <Label htmlFor="toWsOrgId">To 組織</Label>
           <select
-            id="supplierOrgId"
-            name="supplierOrgId"
+            id="toWsOrgId"
+            name="toWsOrgId"
             required
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className={selectClass}
           >
-            <option value="">サプライヤーを選択...</option>
+            <option value="">組織を選択...</option>
             {orgs.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.display_name}
+              <option key={org.wsOrgId} value={org.wsOrgId}>
+                {org.name}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="relationshipType">関係タイプ</Label>
+          <select
+            id="relationshipType"
+            name="relationshipType"
+            defaultValue="supplies"
+            className={selectClass}
+          >
+            <option value="supplies">供給</option>
+            <option value="manufactures_for">製造委託</option>
+            <option value="ships_for">輸送</option>
+            <option value="sells_to">販売</option>
+            <option value="owns">所有</option>
           </select>
         </div>
         <div className="space-y-2">
@@ -72,7 +90,7 @@ export function AddRelationshipForm({
             id="verificationStatus"
             name="verificationStatus"
             defaultValue="inferred"
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className={selectClass}
           >
             <option value="inferred">推定</option>
             <option value="declared">自己申告</option>

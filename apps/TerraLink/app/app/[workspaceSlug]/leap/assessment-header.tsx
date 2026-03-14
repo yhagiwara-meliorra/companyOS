@@ -42,10 +42,12 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export function AssessmentHeader({
+  canEdit = false,
   workspaceSlug,
   assessments,
   activeAssessment,
 }: {
+  canEdit?: boolean;
   workspaceSlug: string;
   assessments: AssessmentRow[];
   activeAssessment: AssessmentRow | undefined;
@@ -93,56 +95,58 @@ export function AssessmentHeader({
                 {ASSESSMENT_STATUS_LABELS[activeAssessment.status] ?? activeAssessment.status}
               </Badge>
             )}
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  新規アセスメント
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>アセスメントを作成</DialogTitle>
-                </DialogHeader>
-                <form action={handleCreate} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="assessmentCycle">アセスメントサイクル</Label>
-                    <Input
-                      id="assessmentCycle"
-                      name="assessmentCycle"
-                      placeholder="例: FY2026 Q1"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="methodVersion">メソッドバージョン</Label>
-                    <Input
-                      id="methodVersion"
-                      name="methodVersion"
-                      placeholder="例: TNFD v1.0"
-                      defaultValue="TNFD v1.0"
-                      required
-                    />
-                  </div>
-                  {error && (
-                    <p className="text-sm text-red-600">{error}</p>
-                  )}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    作成
+            {canEdit && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    新規アセスメント
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>アセスメントを作成</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleCreate} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="assessmentCycle">アセスメントサイクル</Label>
+                      <Input
+                        id="assessmentCycle"
+                        name="assessmentCycle"
+                        placeholder="例: FY2026 Q1"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="methodVersion">メソッドバージョン</Label>
+                      <Input
+                        id="methodVersion"
+                        name="methodVersion"
+                        placeholder="例: TNFD v1.0"
+                        defaultValue="TNFD v1.0"
+                        required
+                      />
+                    </div>
+                    {error && (
+                      <p className="text-sm text-red-600">{error}</p>
+                    )}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      作成
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </div>
       </CardHeader>
       {activeAssessment && (
         <CardContent>
           <div className="flex items-center gap-3">
-            {activeAssessment.status === "draft" && (
+            {canEdit && activeAssessment.status === "draft" && (
               <Button
                 size="sm"
                 variant="outline"
@@ -155,7 +159,7 @@ export function AssessmentHeader({
                 アクティブ化
               </Button>
             )}
-            {activeAssessment.status === "active" && (
+            {canEdit && activeAssessment.status === "active" && (
               <Button
                 size="sm"
                 variant="outline"

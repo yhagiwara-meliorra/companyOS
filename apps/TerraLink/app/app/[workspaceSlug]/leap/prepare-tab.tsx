@@ -104,6 +104,7 @@ const TNFD_SECTIONS = [
 ];
 
 type Props = {
+  canEdit?: boolean;
   workspaceSlug: string;
   assessmentId: string;
   disclosures: DisclosureRow[];
@@ -111,6 +112,7 @@ type Props = {
 };
 
 export function PrepareTab({
+  canEdit = false,
   workspaceSlug,
   assessmentId,
   disclosures,
@@ -163,48 +165,50 @@ export function PrepareTab({
                 このアセスメントに関連するTNFD / CSRD報告セクション
               </CardDescription>
             </div>
-            <Dialog open={discOpen} onOpenChange={setDiscOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  新規開示
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>開示を作成</DialogTitle>
-                </DialogHeader>
-                <form action={handleCreateDisclosure} className="space-y-4">
-                  <input type="hidden" name="assessmentId" value={assessmentId} />
-                  <div className="space-y-2">
-                    <Label>フレームワーク</Label>
-                    <select name="framework" defaultValue="tnfd" className={selectCn}>
-                      <option value="tnfd">TNFD</option>
-                      <option value="csrd">CSRD</option>
-                      <option value="internal">社内用</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>セクション</Label>
-                    <select name="sectionKey" required className={selectCn}>
-                      <option value="">セクションを選択...</option>
-                      {TNFD_SECTIONS.map((s) => (
-                        <option key={s.key} value={s.key}>{s.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>内容 (Markdown)</Label>
-                    <Textarea name="contentMd" placeholder="開示内容を記載..." rows={6} />
-                  </div>
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    作成
+            {canEdit && (
+              <Dialog open={discOpen} onOpenChange={setDiscOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    新規開示
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>開示を作成</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleCreateDisclosure} className="space-y-4">
+                    <input type="hidden" name="assessmentId" value={assessmentId} />
+                    <div className="space-y-2">
+                      <Label>フレームワーク</Label>
+                      <select name="framework" defaultValue="tnfd" className={selectCn}>
+                        <option value="tnfd">TNFD</option>
+                        <option value="csrd">CSRD</option>
+                        <option value="internal">社内用</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>セクション</Label>
+                      <select name="sectionKey" required className={selectCn}>
+                        <option value="">セクションを選択...</option>
+                        {TNFD_SECTIONS.map((s) => (
+                          <option key={s.key} value={s.key}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>内容 (Markdown)</Label>
+                      <Textarea name="contentMd" placeholder="開示内容を記載..." rows={6} />
+                    </div>
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      作成
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -230,7 +234,7 @@ export function PrepareTab({
                   <TableHead>セクション</TableHead>
                   <TableHead>ステータス</TableHead>
                   <TableHead>最終更新</TableHead>
-                  <TableHead>操作</TableHead>
+                  {canEdit && <TableHead>操作</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,20 +264,22 @@ export function PrepareTab({
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(disc.created_at).toLocaleDateString("ja-JP")}
                       </TableCell>
-                      <TableCell>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => {
-                            setEditDisclosure(disc);
-                            setEditContent(disc.content_md);
-                          }}
-                        >
-                          <Pencil className="mr-1 h-3 w-3" />
-                          編集
-                        </Button>
-                      </TableCell>
+                      {canEdit && (
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => {
+                              setEditDisclosure(disc);
+                              setEditContent(disc.content_md);
+                            }}
+                          >
+                            <Pencil className="mr-1 h-3 w-3" />
+                            編集
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -284,73 +290,75 @@ export function PrepareTab({
       </Card>
 
       {/* Disclosure Edit Dialog */}
-      <Dialog open={!!editDisclosure} onOpenChange={(v) => !v && setEditDisclosure(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              開示を編集 —{" "}
-              {TNFD_SECTIONS.find((s) => s.key === editDisclosure?.section_key)?.label ??
-                editDisclosure?.section_key}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              rows={12}
-              placeholder="Markdown形式で開示内容を記載..."
-            />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant="secondary"
-                  className={`text-[10px] uppercase ${FRAMEWORK_COLOR[editDisclosure?.framework ?? ""] ?? ""}`}
-                >
-                  {editDisclosure?.framework}
-                </Badge>
-                <Badge
-                  variant="secondary"
-                  className={`text-[10px] ${STATUS_STYLE[editDisclosure?.status ?? ""] ?? ""}`}
-                >
-                  {DISCLOSURE_STATUS_LABELS[editDisclosure?.status ?? ""] ?? editDisclosure?.status}
-                </Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => editDisclosure && handleUpdateDisclosure(editDisclosure.id)}
-                >
-                  下書き保存
-                </Button>
-                {editDisclosure?.status === "draft" && (
+      {canEdit && (
+        <Dialog open={!!editDisclosure} onOpenChange={(v) => !v && setEditDisclosure(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                開示を編集 —{" "}
+                {TNFD_SECTIONS.find((s) => s.key === editDisclosure?.section_key)?.label ??
+                  editDisclosure?.section_key}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                rows={12}
+                placeholder="Markdown形式で開示内容を記載..."
+              />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="secondary"
+                    className={`text-[10px] uppercase ${FRAMEWORK_COLOR[editDisclosure?.framework ?? ""] ?? ""}`}
+                  >
+                    {editDisclosure?.framework}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className={`text-[10px] ${STATUS_STYLE[editDisclosure?.status ?? ""] ?? ""}`}
+                  >
+                    {DISCLOSURE_STATUS_LABELS[editDisclosure?.status ?? ""] ?? editDisclosure?.status}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
                   <Button
+                    variant="outline"
                     size="sm"
                     disabled={isPending}
-                    onClick={() =>
-                      editDisclosure && handleUpdateDisclosure(editDisclosure.id, "review")
-                    }
+                    onClick={() => editDisclosure && handleUpdateDisclosure(editDisclosure.id)}
                   >
-                    レビューに提出
+                    下書き保存
                   </Button>
-                )}
-                {editDisclosure?.status === "review" && (
-                  <Button
-                    size="sm"
-                    disabled={isPending}
-                    onClick={() =>
-                      editDisclosure && handleUpdateDisclosure(editDisclosure.id, "approved")
-                    }
-                  >
-                    承認
-                  </Button>
-                )}
+                  {editDisclosure?.status === "draft" && (
+                    <Button
+                      size="sm"
+                      disabled={isPending}
+                      onClick={() =>
+                        editDisclosure && handleUpdateDisclosure(editDisclosure.id, "review")
+                      }
+                    >
+                      レビューに提出
+                    </Button>
+                  )}
+                  {editDisclosure?.status === "review" && (
+                    <Button
+                      size="sm"
+                      disabled={isPending}
+                      onClick={() =>
+                        editDisclosure && handleUpdateDisclosure(editDisclosure.id, "approved")
+                      }
+                    >
+                      承認
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Monitoring Rules */}
       <Card>
@@ -365,49 +373,51 @@ export function PrepareTab({
                 データ変更、閾値、レビューサイクルの自動アラート
               </CardDescription>
             </div>
-            <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  ルールを追加
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>モニタリングルールを作成</DialogTitle>
-                </DialogHeader>
-                <form action={handleCreateRule} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>対象種別</Label>
-                    <select name="targetType" defaultValue="site" className={selectCn}>
-                      <option value="site">サイト</option>
-                      <option value="organization">組織</option>
-                      <option value="material">原材料</option>
-                      <option value="relationship">サプライ関係</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>対象ID</Label>
-                    <Input name="targetId" placeholder="対象エンティティのUUID" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>ルール種別</Label>
-                    <select name="ruleType" required className={selectCn}>
-                      <option value="">ルール種別を選択...</option>
-                      <option value="source_refresh">ソース更新</option>
-                      <option value="threshold">閾値アラート</option>
-                      <option value="missing_evidence">エビデンス不足</option>
-                      <option value="review_due">レビュー期限</option>
-                    </select>
-                  </div>
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    ルールを作成
+            {canEdit && (
+              <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    ルールを追加
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>モニタリングルールを作成</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleCreateRule} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>対象種別</Label>
+                      <select name="targetType" defaultValue="site" className={selectCn}>
+                        <option value="site">サイト</option>
+                        <option value="organization">組織</option>
+                        <option value="material">原材料</option>
+                        <option value="relationship">サプライ関係</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>対象ID</Label>
+                      <Input name="targetId" placeholder="対象エンティティのUUID" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>ルール種別</Label>
+                      <select name="ruleType" required className={selectCn}>
+                        <option value="">ルール種別を選択...</option>
+                        <option value="source_refresh">ソース更新</option>
+                        <option value="threshold">閾値アラート</option>
+                        <option value="missing_evidence">エビデンス不足</option>
+                        <option value="review_due">レビュー期限</option>
+                      </select>
+                    </div>
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      ルールを作成
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>

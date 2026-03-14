@@ -19,13 +19,14 @@ const selectCn =
 
 const SITE_TYPES = [
   { value: "farm", label: "農場" },
-  { value: "plantation", label: "プランテーション" },
   { value: "factory", label: "工場" },
   { value: "warehouse", label: "倉庫" },
   { value: "port", label: "港湾" },
   { value: "mine", label: "鉱山" },
   { value: "office", label: "オフィス" },
-  { value: "other", label: "その他" },
+  { value: "project_site", label: "プロジェクトサイト" },
+  { value: "store", label: "店舗" },
+  { value: "unknown", label: "不明" },
 ];
 
 export function SupplierSiteForm() {
@@ -103,6 +104,17 @@ export function SupplierSiteForm() {
                 min={-180}
                 max={180}
                 placeholder="139.6503"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="areaHa">面積 (ha)</Label>
+              <Input
+                id="areaHa"
+                name="areaHa"
+                type="number"
+                step="any"
+                min={0}
+                placeholder="100"
               />
             </div>
             <div className="space-y-2 sm:col-span-2 lg:col-span-3">

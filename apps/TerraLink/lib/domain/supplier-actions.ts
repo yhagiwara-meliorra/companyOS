@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 import { z } from "zod/v4";
 
 export type ActionState = { error?: string; success?: boolean };
@@ -28,13 +29,14 @@ const SupplierSiteSchema = z.object({
   siteName: z.string().min(1, "Site name is required"),
   siteType: z.enum([
     "farm",
-    "plantation",
     "factory",
     "warehouse",
     "port",
     "mine",
     "office",
-    "other",
+    "project_site",
+    "store",
+    "unknown",
   ]),
   countryCode: z.string().max(3).optional(),
   regionAdmin1: z.string().optional(),
@@ -137,6 +139,7 @@ export async function addSupplierSite(
       region: parsed.data.regionAdmin1 || null,
       latitude: parsed.data.lat ?? null,
       longitude: parsed.data.lng ?? null,
+      area_ha: parsed.data.areaHa ?? null,
       address_text: parsed.data.address || null,
       verification_status: "declared",
     })
@@ -174,6 +177,16 @@ export async function addSupplierSite(
     }
   }
 
+  // Log to each linked workspace
+  if (wsOrgs) {
+    for (const wo of wsOrgs) {
+      await appendChangeLog(wo.workspace_id, auth.userId, "sites", site.id, "insert", null, {
+        site_name: parsed.data.siteName, site_type: parsed.data.siteType,
+        source: "supplier_portal",
+      });
+    }
+  }
+
   revalidatePath("/supplier");
   return { success: true };
 }
@@ -207,6 +220,19 @@ export async function declareVerificationStatus(
     .eq("id", siteId);
 
   if (error) return { error: error.message };
+
+  // Log to all workspaces where this site exists
+  const { data: wsSites } = await admin
+    .from("workspace_sites")
+    .select("workspace_id")
+    .eq("site_id", siteId);
+  if (wsSites) {
+    for (const ws of wsSites) {
+      await appendChangeLog(ws.workspace_id, auth.userId, "sites", siteId, "status_change", null, {
+        verification_status: validStatus, source: "supplier_portal",
+      });
+    }
+  }
 
   revalidatePath("/supplier");
   return { success: true };

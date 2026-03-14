@@ -204,13 +204,14 @@ const SiteSchema = z.object({
   name: z.string().min(1, "サイト名は必須です"),
   siteType: z.enum([
     "farm",
-    "plantation",
     "factory",
     "warehouse",
     "port",
     "mine",
     "office",
-    "other",
+    "project_site",
+    "store",
+    "unknown",
   ]),
   countryCode: z.string().max(3).optional(),
   regionAdmin1: z.string().optional(),
@@ -281,14 +282,14 @@ describe("SiteSchema", () => {
   it("accepts boundary latitude values", () => {
     const minLat = SiteSchema.safeParse({
       name: "South Pole",
-      siteType: "other",
+      siteType: "unknown",
       lat: -90,
     });
     expect(minLat.success).toBe(true);
 
     const maxLat = SiteSchema.safeParse({
       name: "North Pole",
-      siteType: "other",
+      siteType: "unknown",
       lat: 90,
     });
     expect(maxLat.success).toBe(true);
@@ -320,13 +321,14 @@ describe("SiteSchema", () => {
   it("accepts all valid site types", () => {
     const types = [
       "farm",
-      "plantation",
       "factory",
       "warehouse",
       "port",
       "mine",
       "office",
-      "other",
+      "project_site",
+      "store",
+      "unknown",
     ];
     for (const siteType of types) {
       const result = SiteSchema.safeParse({ name: "Test", siteType });
@@ -338,10 +340,12 @@ describe("SiteSchema", () => {
 // ── Supply Relationship Schema ──────────────────────────
 
 const SupplyRelationshipSchema = z.object({
-  buyerOrgId: z.string().uuid("Invalid buyer organization"),
-  supplierOrgId: z.string().uuid("Invalid supplier organization"),
+  fromWsOrgId: z.string().uuid("Invalid from organization"),
+  toWsOrgId: z.string().uuid("Invalid to organization"),
   tier: z.coerce.number().int().min(0).max(10).optional(),
-  status: z.enum(["active", "inactive", "pending"]).default("active"),
+  relationshipType: z
+    .enum(["supplies", "manufactures_for", "ships_for", "sells_to", "owns"])
+    .default("supplies"),
   verificationStatus: z
     .enum(["inferred", "declared", "verified"])
     .default("inferred"),
@@ -353,29 +357,29 @@ describe("SupplyRelationshipSchema", () => {
 
   it("accepts valid relationship", () => {
     const result = SupplyRelationshipSchema.safeParse({
-      buyerOrgId: validUUID1,
-      supplierOrgId: validUUID2,
+      fromWsOrgId: validUUID1,
+      toWsOrgId: validUUID2,
       tier: 1,
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.status).toBe("active"); // default
+      expect(result.data.relationshipType).toBe("supplies"); // default
       expect(result.data.verificationStatus).toBe("inferred"); // default
     }
   });
 
   it("rejects non-UUID org IDs", () => {
     const result = SupplyRelationshipSchema.safeParse({
-      buyerOrgId: "not-a-uuid",
-      supplierOrgId: validUUID2,
+      fromWsOrgId: "not-a-uuid",
+      toWsOrgId: validUUID2,
     });
     expect(result.success).toBe(false);
   });
 
   it("rejects tier above 10", () => {
     const result = SupplyRelationshipSchema.safeParse({
-      buyerOrgId: validUUID1,
-      supplierOrgId: validUUID2,
+      fromWsOrgId: validUUID1,
+      toWsOrgId: validUUID2,
       tier: 11,
     });
     expect(result.success).toBe(false);
@@ -383,8 +387,8 @@ describe("SupplyRelationshipSchema", () => {
 
   it("rejects negative tier", () => {
     const result = SupplyRelationshipSchema.safeParse({
-      buyerOrgId: validUUID1,
-      supplierOrgId: validUUID2,
+      fromWsOrgId: validUUID1,
+      toWsOrgId: validUUID2,
       tier: -1,
     });
     expect(result.success).toBe(false);
@@ -392,8 +396,8 @@ describe("SupplyRelationshipSchema", () => {
 
   it("coerces string tier to number", () => {
     const result = SupplyRelationshipSchema.safeParse({
-      buyerOrgId: validUUID1,
-      supplierOrgId: validUUID2,
+      fromWsOrgId: validUUID1,
+      toWsOrgId: validUUID2,
       tier: "3",
     });
     expect(result.success).toBe(true);
@@ -405,8 +409,8 @@ describe("SupplyRelationshipSchema", () => {
   it("accepts all verification statuses", () => {
     for (const vs of ["inferred", "declared", "verified"]) {
       const result = SupplyRelationshipSchema.safeParse({
-        buyerOrgId: validUUID1,
-        supplierOrgId: validUUID2,
+        fromWsOrgId: validUUID1,
+        toWsOrgId: validUUID2,
         verificationStatus: vs,
       });
       expect(result.success).toBe(true);

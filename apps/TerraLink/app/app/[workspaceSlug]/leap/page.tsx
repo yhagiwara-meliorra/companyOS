@@ -3,6 +3,7 @@ import { getWorkspaceContext } from "@/lib/auth/workspace-context";
 import { createAdminClient } from "@/lib/db/admin";
 import { PageHeader } from "@/components/page-header";
 import { LeapTabs } from "./leap-tabs";
+import { canEdit } from "@/lib/auth/roles";
 
 export default async function LeapPage({
   params,
@@ -12,6 +13,8 @@ export default async function LeapPage({
   const { workspaceSlug } = await params;
   const ctx = await getWorkspaceContext(workspaceSlug);
   if (!ctx) notFound();
+
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   const admin = createAdminClient();
 
@@ -146,9 +149,11 @@ export default async function LeapPage({
         id,
         workspace_site_id,
         data_source_id,
-        source_observation_id,
+        source_version_id,
+        intersection_type,
         distance_m,
-        overlap_pct,
+        area_overlap_m2,
+        severity_hint,
         created_at,
         data_sources ( source_name, category )
       `
@@ -199,12 +204,12 @@ export default async function LeapPage({
     if (orgIds.length > 0) {
       const { data: orgData } = await admin
         .from("organizations")
-        .select("id, org_name")
+        .select("id, display_name")
         .in("id", orgIds);
-      // Map ws_org_id → org_name
+      // Map ws_org_id → display_name
       (woData ?? []).forEach((wo) => {
         const org = (orgData ?? []).find((o) => o.id === wo.organization_id);
-        if (org) orgNameMap[wo.id] = org.org_name;
+        if (org) orgNameMap[wo.id] = org.display_name;
       });
     }
   }
@@ -212,7 +217,7 @@ export default async function LeapPage({
   // ── Workspace sites/orgs list for scope creation ──────────
   const { data: wsOrgs } = await admin
     .from("workspace_organizations")
-    .select("id, organization_id, organizations ( org_name )")
+    .select("id, organization_id, organizations ( display_name )")
     .eq("workspace_id", ctx.workspace.id);
 
   const { data: wsSites } = await admin
@@ -228,6 +233,7 @@ export default async function LeapPage({
       />
 
       <LeapTabs
+        canEdit={hasEditAccess}
         workspaceSlug={workspaceSlug}
         assessments={(assessments ?? []) as AssessmentRow[]}
         activeAssessment={activeAssessment as AssessmentRow | undefined}
@@ -246,8 +252,8 @@ export default async function LeapPage({
           (wsOrgs ?? []).map((wo) => ({
             id: wo.id,
             name:
-              (wo.organizations as unknown as { org_name: string })
-                ?.org_name ?? "Unknown",
+              (wo.organizations as unknown as { display_name: string })
+                ?.display_name ?? "Unknown",
           }))
         }
         wsSiteOptions={
@@ -341,9 +347,11 @@ export type IntersectionRow = {
   id: string;
   workspace_site_id: string;
   data_source_id: string;
-  source_observation_id: string | null;
+  source_version_id: string;
+  intersection_type: string;
   distance_m: number | null;
-  overlap_pct: number | null;
+  area_overlap_m2: number | null;
+  severity_hint: number | null;
   created_at: string;
   data_sources: { source_name: string; category: string } | null;
 };

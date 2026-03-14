@@ -1,0 +1,13 @@
+cattle_animal_id,establishment_type,country_code,establishment_name,latitude,longitude,region,date_entered,date_left,sequence_order
+PLACEHOLDER_ANIMAL_1,birthplace,CO,Hacienda La Esperanza,7.1234,-73.1234,Santander,2022-03-15,,1
+PLACEHOLDER_ANIMAL_1,rearing_farm,CO,Finca El Progreso,7.0890,-73.0987,Santander,2022-03-16,2024-06-30,2
+PLACEHOLDER_ANIMAL_1,feeding_facility,CO,Engorde Los Llanos,4.4321,-73.6543,Meta,2024-07-01,2025-11-30,3
+PLACEHOLDER_ANIMAL_1,slaughterhouse,CO,Frigorifico Guadalupe,4.5678,-74.1234,Bogota,2025-12-01,2025-12-01,4
+PLACEHOLDER_ANIMAL_2,birthplace,CO,Hacienda San Jose,6.9876,-73.2345,Norte de Santander,2021-08-20,,1
+PLACEHOLDER_ANIMAL_2,rearing_farm,CO,Finca Bella Vista,6.9540,-73.1890,Norte de Santander,2021-08-21,2024-03-15,2
+PLACEHOLDER_ANIMAL_2,feeding_facility,CO,Engorde Los Llanos,4.4321,-73.6543,Meta,2024-03-16,2025-10-31,3
+PLACEHOLDER_ANIMAL_2,slaughterhouse,CO,Frigorifico Guadalupe,4.5678,-74.1234,Bogota,2025-11-01,2025-11-01,4
+PLACEHOLDER_ANIMAL_3,birthplace,CO,Rancho El Diamante,5.3210,-75.6789,Caldas,2022-01-10,,1
+PLACEHOLDER_ANIMAL_3,rearing_farm,CO,Rancho El Diamante,5.3210,-75.6789,Caldas,2022-01-11,2024-09-30,2
+PLACEHOLDER_ANIMAL_3,feeding_facility,CO,Centro Ganadero Villavicencio,4.1523,-73.6298,Meta,2024-10-01,2025-12-15,3
+PLACEHOLDER_ANIMAL_3,slaughterhouse,CO,Frigorifico Guadalupe,4.5678,-74.1234,Bogota,2025-12-16,2025-12-16,4

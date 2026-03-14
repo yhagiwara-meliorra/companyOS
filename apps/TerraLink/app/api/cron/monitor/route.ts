@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/db/admin";
 import { sendAlertEmail, type AlertEmailPayload } from "@/lib/notifications/email";
+import { ADMIN_ROLES } from "@/lib/auth/roles";
 
 // Vercel Cron calls this endpoint on schedule.
 // Authorization: CRON_SECRET header must match env var.
@@ -20,6 +21,8 @@ export async function GET(request: Request) {
     staleEvidence: 0,
     sourceRefresh: 0,
     riskRecompute: 0,
+    benchmarkChange: 0,
+    eudrRiskReview: 0,
     errors: [] as string[],
   };
 
@@ -88,7 +91,8 @@ export async function GET(request: Request) {
   // ────────────────────────────────────────────────────────
   // 2. Source Refresh Check
   // Rules with rule_type = 'source_refresh'
-  // Checks data_sources for stale fetched_at timestamps
+  // Checks source_versions.loaded_at for data freshness
+  // (data_sources is a global table; target_id references a data_source_id)
   // ────────────────────────────────────────────────────────
   try {
     const { data: refreshRules } = await admin
@@ -102,14 +106,31 @@ export async function GET(request: Request) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - maxAgeDays);
 
-      // Check workspace data sources
-      const { data: staleSources } = await admin
-        .from("data_sources")
-        .select("id, source_name, fetched_at")
-        .eq("workspace_id", rule.workspace_id)
-        .lt("fetched_at", cutoff.toISOString());
+      // target_id references a data_source_id
+      const dataSourceId = rule.target_id;
+      if (!dataSourceId) continue;
 
-      for (const source of staleSources ?? []) {
+      // Get the data source name
+      const { data: dataSource } = await admin
+        .from("data_sources")
+        .select("id, source_name")
+        .eq("id", dataSourceId)
+        .single();
+
+      if (!dataSource) continue;
+
+      // Check freshness via the latest source_versions.loaded_at
+      const { data: latestVersion } = await admin
+        .from("source_versions")
+        .select("loaded_at")
+        .eq("data_source_id", dataSourceId)
+        .order("loaded_at", { ascending: false })
+        .limit(1);
+
+      const lastLoaded = latestVersion?.[0]?.loaded_at;
+      const isStale = !lastLoaded || new Date(lastLoaded) < cutoff;
+
+      if (isStale) {
         // Check if we already have an open event
         const { data: existing } = await admin
           .from("monitoring_events")
@@ -123,11 +144,11 @@ export async function GET(request: Request) {
             monitoring_rule_id: rule.id,
             status: "open",
             severity: "info",
-            title: `Data source "${source.source_name}" needs refresh`,
+            title: `Data source "${dataSource.source_name}" needs refresh`,
             payload: {
-              data_source_id: source.id,
-              source_name: source.source_name,
-              fetched_at: source.fetched_at,
+              data_source_id: dataSource.id,
+              source_name: dataSource.source_name,
+              last_loaded_at: lastLoaded ?? null,
               max_age_days: maxAgeDays,
               checked_at: new Date().toISOString(),
             },
@@ -164,7 +185,7 @@ export async function GET(request: Request) {
 
       // Find risks in this workspace that haven't been scored since cutoff
       const { data: risks } = await admin
-        .from("nature_risks")
+        .from("risk_register")
         .select(`
           id, title,
           assessment_scopes!inner (
@@ -251,7 +272,7 @@ export async function GET(request: Request) {
         .from("risk_scores")
         .select(`
           id, final_score, risk_id,
-          nature_risks!inner (
+          risk_register!inner (
             title,
             assessment_scopes!inner (
               assessments!inner (
@@ -263,7 +284,7 @@ export async function GET(request: Request) {
         .gte("final_score", threshold);
 
       const workspaceScores = (highScores ?? []).filter((s) => {
-        const risk = s.nature_risks as unknown as {
+        const risk = s.risk_register as unknown as {
           assessment_scopes: {
             assessments: { workspace_id: string };
           };
@@ -272,7 +293,7 @@ export async function GET(request: Request) {
       });
 
       for (const score of workspaceScores) {
-        const riskInfo = score.nature_risks as unknown as { title: string };
+        const riskInfo = score.risk_register as unknown as { title: string };
 
         const { data: existing } = await admin
           .from("monitoring_events")
@@ -307,12 +328,167 @@ export async function GET(request: Request) {
   }
 
   // ────────────────────────────────────────────────────────
-  // 5. Email Notification Digest
+  // 5. EUDR Country Benchmark Change Detection
+  // Rules with rule_type = 'benchmark_change'
+  // Checks if eudr_country_benchmarks have been updated
+  // since the rule's last_run_at.
+  // ────────────────────────────────────────────────────────
+  try {
+    const { data: benchmarkRules } = await admin
+      .from("monitoring_rules")
+      .select("*")
+      .eq("rule_type", "benchmark_change")
+      .eq("is_active", true);
+
+    for (const rule of benchmarkRules ?? []) {
+      // Config may specify watched country codes or commodity types
+      const config = rule.config as Record<string, unknown>;
+      const watchCountries = config.country_codes as string[] | undefined;
+
+      // Check for benchmarks updated since last run
+      const lastRun = rule.last_run_at ?? rule.created_at;
+      let query = admin
+        .from("eudr_country_benchmarks")
+        .select("id, country_code, country_name, risk_tier, updated_at")
+        .gte("updated_at", lastRun);
+
+      if (watchCountries && watchCountries.length > 0) {
+        query = query.in("country_code", watchCountries);
+      }
+
+      const { data: changedBenchmarks } = await query;
+
+      if (changedBenchmarks && changedBenchmarks.length > 0) {
+        // Check for existing open event
+        const { data: existing } = await admin
+          .from("monitoring_events")
+          .select("id")
+          .eq("monitoring_rule_id", rule.id)
+          .eq("status", "open")
+          .limit(1);
+
+        if (!existing || existing.length === 0) {
+          const countries = changedBenchmarks
+            .map((b) => `${b.country_name} (${b.country_code}: ${b.risk_tier})`)
+            .join(", ");
+
+          await admin.from("monitoring_events").insert({
+            monitoring_rule_id: rule.id,
+            status: "open",
+            severity: changedBenchmarks.some((b) => b.risk_tier === "high")
+              ? "critical"
+              : "warning",
+            title: `EUDR 国ベンチマーク変更: ${changedBenchmarks.length}件`,
+            payload: {
+              changed_countries: changedBenchmarks.map((b) => ({
+                country_code: b.country_code,
+                country_name: b.country_name,
+                new_risk_tier: b.risk_tier,
+                updated_at: b.updated_at,
+              })),
+              summary: countries,
+              checked_at: new Date().toISOString(),
+            },
+          });
+          results.benchmarkChange++;
+        }
+      }
+
+      await admin
+        .from("monitoring_rules")
+        .update({ last_run_at: new Date().toISOString() })
+        .eq("id", rule.id);
+    }
+  } catch (e) {
+    results.errors.push(
+      `benchmarkChange: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+
+  // ────────────────────────────────────────────────────────
+  // 6. EUDR Risk Assessment Review
+  // Rules with rule_type = 'eudr_risk_review'
+  // Flags EUDR risk assessments not updated in N days
+  // ────────────────────────────────────────────────────────
+  try {
+    const { data: eudrReviewRules } = await admin
+      .from("monitoring_rules")
+      .select("*")
+      .eq("rule_type", "eudr_risk_review")
+      .eq("is_active", true);
+
+    for (const rule of eudrReviewRules ?? []) {
+      const reviewDays =
+        (rule.config as Record<string, number>)?.review_days ?? 30;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - reviewDays);
+
+      // Find EUDR risk assessments in this workspace that are stale
+      const { data: staleAssessments } = await admin
+        .from("eudr_risk_assessments")
+        .select(
+          "id, dds_id, overall_result, assessed_at, eudr_dds_statements!inner ( internal_reference )"
+        )
+        .eq("workspace_id", rule.workspace_id)
+        .or(`assessed_at.is.null,assessed_at.lt.${cutoff.toISOString()}`);
+
+      for (const assessment of staleAssessments ?? []) {
+        const dds = assessment.eudr_dds_statements as unknown as {
+          internal_reference: string;
+        };
+
+        const { data: existing } = await admin
+          .from("monitoring_events")
+          .select("id")
+          .eq("monitoring_rule_id", rule.id)
+          .eq("status", "open")
+          .limit(1);
+
+        if (!existing || existing.length === 0) {
+          await admin.from("monitoring_events").insert({
+            monitoring_rule_id: rule.id,
+            status: "open",
+            severity:
+              assessment.overall_result === "non_negligible"
+                ? "critical"
+                : "warning",
+            title: `EUDR リスク評価 "${dds.internal_reference}" 要レビュー`,
+            payload: {
+              assessment_id: assessment.id,
+              dds_id: assessment.dds_id,
+              internal_reference: dds.internal_reference,
+              overall_result: assessment.overall_result,
+              last_assessed: assessment.assessed_at,
+              review_days: reviewDays,
+              checked_at: new Date().toISOString(),
+            },
+          });
+          results.eudrRiskReview++;
+        }
+      }
+
+      await admin
+        .from("monitoring_rules")
+        .update({ last_run_at: new Date().toISOString() })
+        .eq("id", rule.id);
+    }
+  } catch (e) {
+    results.errors.push(
+      `eudrRiskReview: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+
+  // ────────────────────────────────────────────────────────
+  // 7. Email Notification Digest
   // If any new events were created, send digest emails to
   // workspace members with admin/owner roles.
   // ────────────────────────────────────────────────────────
   const totalNewEvents =
-    results.staleEvidence + results.sourceRefresh + results.riskRecompute;
+    results.staleEvidence +
+    results.sourceRefresh +
+    results.riskRecompute +
+    results.benchmarkChange +
+    results.eudrRiskReview;
   let emailsSent = 0;
 
   if (totalNewEvents > 0) {
@@ -366,7 +542,7 @@ export async function GET(request: Request) {
           .from("workspace_members")
           .select("user_id, role, profiles ( full_name )")
           .eq("workspace_id", workspaceId)
-          .in("role", ["owner", "admin"])
+          .in("role", [...ADMIN_ROLES])
           .eq("status", "active");
 
         for (const member of members ?? []) {

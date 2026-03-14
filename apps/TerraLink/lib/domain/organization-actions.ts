@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 import { z } from "zod/v4";
 
 // ── Schemas ─────────────────────────────────────────────────
@@ -98,6 +99,12 @@ export async function createOrganization(
 
   if (linkErr) return { error: linkErr.message };
 
+  await appendChangeLog(ws.id, user.id, "organizations", org.id, "insert", null, {
+    legal_name: legalName,
+    display_name: displayName,
+    org_type: orgType,
+  });
+
   revalidatePath(`/app/${workspaceSlug}/orgs`);
   return { success: true };
 }
@@ -137,6 +144,21 @@ export async function updateOrganization(
 
   if (error) return { error: error.message };
 
+  const adminForWs = createAdminClient();
+  const { data: wsForLog } = await adminForWs
+    .from("workspaces")
+    .select("id")
+    .eq("slug", workspaceSlug)
+    .is("deleted_at", null)
+    .single();
+  if (wsForLog) {
+    await appendChangeLog(wsForLog.id, user.id, "organizations", orgId, "update", null, {
+      legal_name: parsed.data.legalName,
+      display_name: parsed.data.displayName,
+      org_type: parsed.data.orgType,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/orgs`);
   return { success: true };
 }
@@ -173,6 +195,12 @@ export async function updateOrgLink(
     .eq("id", linkId);
 
   if (error) return { error: error.message };
+
+  await appendChangeLog(parsed.data.workspaceId, user.id, "workspace_organizations", linkId, "update", null, {
+    relationship_role: parsed.data.relationshipRole,
+    tier: parsed.data.tier,
+    verification_status: parsed.data.verificationStatus,
+  });
 
   revalidatePath(`/app/${workspaceSlug}/orgs`);
   return { success: true };
@@ -280,6 +308,15 @@ export async function importOrganizationsCsv(
     } else {
       imported += insertedOrgs.length;
     }
+  }
+
+  if (imported > 0) {
+    await appendChangeLog(ws.id, user.id, "organizations", ws.id, "insert", null, {
+      action: "csv_import",
+      imported,
+      failed,
+      total: rows.length,
+    });
   }
 
   revalidatePath(`/app/${workspaceSlug}/orgs`);

@@ -29,6 +29,7 @@ import {
 import { EvidenceUploadForm } from "./evidence-upload-form";
 import { EvidenceActions } from "./evidence-actions-client";
 import { AuditLog } from "./audit-log";
+import { canEdit, canUpload } from "@/lib/auth/roles";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -111,7 +112,7 @@ export default async function EvidencePage({
   // Load orgs and sites for upload form selectors
   const { data: wsOrgs } = await admin
     .from("workspace_organizations")
-    .select("organization_id, organizations ( id, org_name )")
+    .select("organization_id, organizations ( id, display_name )")
     .eq("workspace_id", ctx.workspace.id);
 
   const { data: wsSites } = await admin
@@ -120,8 +121,8 @@ export default async function EvidencePage({
     .eq("workspace_id", ctx.workspace.id);
 
   const orgOptions = (wsOrgs ?? []).map((wo) => {
-    const org = wo.organizations as unknown as { id: string; org_name: string };
-    return { id: org?.id ?? "", name: org?.org_name ?? "Unknown" };
+    const org = wo.organizations as unknown as { id: string; display_name: string };
+    return { id: org?.id ?? "", name: org?.display_name ?? "Unknown" };
   }).filter((o) => o.id);
 
   const siteOptions = (wsSites ?? []).map((ws) => {
@@ -130,6 +131,8 @@ export default async function EvidencePage({
   }).filter((s) => s.id);
 
   const items = (evidenceItems ?? []) as EvidenceItemRow[];
+  const canUploadEvidence = canUpload(ctx.membership.role);
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   // Summary stats
   const totalFiles = items.length;
@@ -183,11 +186,13 @@ export default async function EvidencePage({
       </div>
 
       {/* Upload Form */}
-      <EvidenceUploadForm
-        workspaceSlug={workspaceSlug}
-        orgOptions={orgOptions}
-        siteOptions={siteOptions}
-      />
+      {canUploadEvidence && (
+        <EvidenceUploadForm
+          workspaceSlug={workspaceSlug}
+          orgOptions={orgOptions}
+          siteOptions={siteOptions}
+        />
+      )}
 
       {/* Evidence Table */}
       <Card>
@@ -270,6 +275,7 @@ export default async function EvidencePage({
                           evidenceId={item.id}
                           storagePath={item.storage_path}
                           currentVisibility={item.visibility}
+                          canEdit={hasEditAccess}
                         />
                       </TableCell>
                     </TableRow>

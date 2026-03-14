@@ -21,20 +21,29 @@ export const ROLE_LABELS: Record<string, string> = {
 
 export const SITE_TYPE_LABELS: Record<string, string> = {
   farm: "農場",
-  plantation: "プランテーション",
   factory: "工場",
   warehouse: "倉庫",
-  port: "港湾",
+  port: "港",
   mine: "鉱山",
   office: "オフィス",
-  other: "その他",
+  project_site: "プロジェクトサイト",
+  store: "店舗",
+  unknown: "不明",
 };
 
-export const SITE_ROLE_LABELS: Record<string, string> = {
+export const OWNERSHIP_ROLE_LABELS: Record<string, string> = {
   operator: "運営者",
   owner: "所有者",
   lessee: "借主",
-  supplier: "サプライヤー",
+  investor: "投資家",
+};
+
+export const SCOPE_ROLE_LABELS: Record<string, string> = {
+  own_operation: "自社運営",
+  upstream: "上流",
+  downstream: "下流",
+  logistics: "物流",
+  portfolio_asset: "ポートフォリオ資産",
 };
 
 export const RUN_STATUS_LABELS: Record<string, string> = {
@@ -64,10 +73,17 @@ export const RISK_STATUS_LABELS: Record<string, string> = {
   closed: "完了",
 };
 
-export const SUPPLY_STATUS_LABELS: Record<string, string> = {
-  active: "有効",
-  inactive: "無効",
-  suspended: "停止中",
+export const RELATIONSHIP_TYPE_LABELS: Record<string, string> = {
+  supplies: "供給",
+  manufactures_for: "製造委託",
+  ships_for: "輸送",
+  sells_to: "販売",
+  owns: "所有",
+};
+
+export const FLOW_DIRECTION_LABELS: Record<string, string> = {
+  upstream: "上流",
+  downstream: "下流",
 };
 
 export const LEVEL_LABELS: Record<string, string> = {
@@ -110,6 +126,72 @@ export const TOPIC_GROUP_LABELS: Record<string, string> = {
   species: "種",
   pollution: "汚染",
   climate_interaction: "気候相互作用",
+};
+
+// ── EUDR Labels ─────────────────────────────────────────────
+
+export const EUDR_COMMODITY_TYPE_LABELS: Record<string, string> = {
+  cattle: "牛",
+  cocoa: "カカオ",
+  coffee: "コーヒー",
+  oil_palm: "パーム油",
+  rubber: "ゴム",
+  soya: "大豆",
+  wood: "木材",
+};
+
+export const DDS_STATUS_LABELS: Record<string, string> = {
+  draft: "下書き",
+  ready: "提出準備完了",
+  submitted: "提出済み",
+  validated: "検証済み",
+  rejected: "却下",
+  withdrawn: "取下げ",
+};
+
+export const OPERATOR_TYPE_LABELS: Record<string, string> = {
+  operator: "オペレーター",
+  non_sme_trader: "大規模トレーダー",
+  sme_trader: "中小トレーダー",
+};
+
+export const GEOLOCATION_TYPE_LABELS: Record<string, string> = {
+  point: "ポイント",
+  polygon: "ポリゴン",
+};
+
+export const ESTABLISHMENT_TYPE_LABELS: Record<string, string> = {
+  birthplace: "出生地",
+  rearing_farm: "飼育農場",
+  feeding_facility: "肥育施設",
+  grazing_land: "放牧地",
+  slaughterhouse: "食肉処理場",
+};
+
+export const EUDR_RISK_RESULT_LABELS: Record<string, string> = {
+  pending: "未評価",
+  negligible: "無視可能",
+  non_negligible: "無視不可",
+};
+
+export const COUNTRY_RISK_TIER_LABELS: Record<string, string> = {
+  low: "低リスク",
+  standard: "標準リスク",
+  high: "高リスク",
+};
+
+export const MITIGATION_STATUS_LABELS: Record<string, string> = {
+  planned: "計画中",
+  in_progress: "実施中",
+  completed: "完了",
+  verified: "検証済み",
+};
+
+export const EXPORT_TYPE_LABELS: Record<string, string> = {
+  dds_json: "DDS JSON",
+  dds_csv: "DDS CSV",
+  evidence_pack: "証憑パック",
+  traces_payload: "TRACES ペイロード",
 };
 
 /** Helper to look up a label, falling back to the raw value */

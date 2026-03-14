@@ -17,6 +17,8 @@ import {
 import { MapPin, Plus } from "lucide-react";
 import { SiteCsvImportForm } from "./site-csv-import-form";
 import { SITE_TYPE_LABELS } from "@/lib/labels";
+import { canEdit } from "@/lib/auth/roles";
+import { SiteMap } from "@/components/map";
 
 export default async function SitesListPage({
   params,
@@ -33,17 +35,17 @@ export default async function SitesListPage({
     .select(
       `
       id,
-      visibility,
+      scope_role,
       sites (
         id,
-        name,
+        site_name,
         site_type,
         country_code,
-        region_admin1,
-        lat,
-        lng,
+        region,
+        latitude,
+        longitude,
         area_ha,
-        address
+        address_text
       )
     `
     )
@@ -65,6 +67,7 @@ export default async function SitesListPage({
     };
     return org;
   }).filter(Boolean);
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   return (
     <div className="space-y-6">
@@ -72,15 +75,17 @@ export default async function SitesListPage({
         title="サイト"
         description="サプライチェーン全体の事業サイトを管理"
         actions={
-          <div className="flex items-center gap-2">
-            <SiteCsvImportForm workspaceSlug={workspaceSlug} orgs={orgs} />
-            <Button asChild>
-              <Link href={`/app/${workspaceSlug}/sites/new`}>
-                <Plus className="mr-2 h-4 w-4" />
-                サイトを追加
-              </Link>
-            </Button>
-          </div>
+          hasEditAccess ? (
+            <div className="flex items-center gap-2">
+              <SiteCsvImportForm workspaceSlug={workspaceSlug} orgs={orgs} />
+              <Button asChild>
+                <Link href={`/app/${workspaceSlug}/sites/new`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  サイトを追加
+                </Link>
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -90,53 +95,55 @@ export default async function SitesListPage({
           title="サイトがありません"
           description="最初のサイトを追加して、サプライチェーンの地理マッピングを始めましょう。"
           action={
-            <Button asChild>
-              <Link href={`/app/${workspaceSlug}/sites/new`}>
-                <Plus className="mr-2 h-4 w-4" />
-                サイトを追加
-              </Link>
-            </Button>
+            hasEditAccess ? (
+              <Button asChild>
+                <Link href={`/app/${workspaceSlug}/sites/new`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  サイトを追加
+                </Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (
         <div className="space-y-6">
-          {/* Mini Map placeholder */}
-          <div className="relative h-64 overflow-hidden rounded-xl border bg-gradient-to-br from-emerald-50 to-sky-50 dark:from-emerald-950/30 dark:to-sky-950/30">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center">
-                <MapPin className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                <p className="mt-2 text-sm text-muted-foreground">
-                  地図表示 •{" "}
-                  {sites.filter((s) => {
-                    const site = s.sites as unknown as { lat: number | null };
-                    return site?.lat != null;
-                  }).length}{" "}
-                  件のサイトに座標あり
-                </p>
-              </div>
-            </div>
-            {/* Plot dots for sites with coordinates */}
-            {sites.map((ws) => {
-              const site = ws.sites as unknown as {
-                id: string;
-                name: string;
-                lat: number | null;
-                lng: number | null;
-              };
-              if (!site?.lat || !site?.lng) return null;
-              // Normalize to 0-100% position on map
-              const x = ((site.lng + 180) / 360) * 100;
-              const y = ((90 - site.lat) / 180) * 100;
-              return (
-                <div
-                  key={site.id}
-                  className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-md shadow-primary/30"
-                  style={{ left: `${x}%`, top: `${y}%` }}
-                  title={site.name}
-                />
+          {/* Site Map */}
+          {(() => {
+            const sitesWithCoords = sites
+              .map((ws) => {
+                const site = ws.sites as unknown as {
+                  id: string;
+                  site_name: string;
+                  latitude: number | null;
+                  longitude: number | null;
+                };
+                return site;
+              })
+              .filter(
+                (s): s is { id: string; site_name: string; latitude: number; longitude: number } =>
+                  s != null && s.latitude != null && s.longitude != null
               );
-            })}
-          </div>
+            return sitesWithCoords.length > 0 ? (
+              <SiteMap
+                sites={sitesWithCoords.map((s) => ({
+                  id: s.id,
+                  name: s.site_name,
+                  lat: s.latitude,
+                  lng: s.longitude,
+                }))}
+                className="h-48 w-full rounded-lg"
+              />
+            ) : (
+              <div className="flex h-48 items-center justify-center rounded-xl border bg-muted">
+                <div className="text-center">
+                  <MapPin className="mx-auto h-8 w-8 text-muted-foreground/40" />
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    座標が設定されたサイトがありません
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Table */}
           <div className="rounded-xl border bg-card shadow-sm">
@@ -155,14 +162,14 @@ export default async function SitesListPage({
                 {sites.map((ws) => {
                   const site = ws.sites as unknown as {
                     id: string;
-                    name: string;
+                    site_name: string;
                     site_type: string;
                     country_code: string | null;
-                    region_admin1: string | null;
-                    lat: number | null;
-                    lng: number | null;
+                    region: string | null;
+                    latitude: number | null;
+                    longitude: number | null;
                     area_ha: number | null;
-                    address: string | null;
+                    address_text: string | null;
                   };
                   if (!site) return null;
                   return (
@@ -172,11 +179,11 @@ export default async function SitesListPage({
                           href={`/app/${workspaceSlug}/sites/${site.id}`}
                           className="font-medium hover:text-primary transition-colors"
                         >
-                          {site.name}
+                          {site.site_name}
                         </Link>
-                        {site.address && (
+                        {site.address_text && (
                           <p className="text-xs text-muted-foreground truncate max-w-[220px]">
-                            {site.address}
+                            {site.address_text}
                           </p>
                         )}
                       </TableCell>
@@ -186,15 +193,15 @@ export default async function SitesListPage({
                         </Badge>
                       </TableCell>
                       <TableCell>{site.country_code ?? "—"}</TableCell>
-                      <TableCell>{site.region_admin1 ?? "—"}</TableCell>
+                      <TableCell>{site.region ?? "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {site.lat != null && site.lng != null
-                          ? `${site.lat.toFixed(4)}, ${site.lng.toFixed(4)}`
+                        {site.latitude != null && site.longitude != null
+                          ? `${site.latitude.toFixed(4)}, ${site.longitude.toFixed(4)}`
                           : "—"}
                       </TableCell>
                       <TableCell>
                         {site.area_ha != null
-                          ? site.area_ha.toLocaleString()
+                          ? site.area_ha.toLocaleString("ja-JP")
                           : "—"}
                       </TableCell>
                     </TableRow>

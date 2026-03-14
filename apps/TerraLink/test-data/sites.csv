@@ -1,0 +1,16 @@
+site_name,site_type,country_code,region,latitude,longitude,area_ha,address_text
+Fazenda Esperanca,farm,BR,Para,-3.1234,-49.9876,250.5,Rod. PA-150 km 42 Maraba PA
+Fazenda Rio Verde,farm,BR,Mato Grosso,-12.6543,-55.3210,1200.0,Fazenda Rio Verde Sinop MT
+PT Kalimantan Estate 1,farm,ID,West Kalimantan,-0.0234,109.3456,480.0,Jl. Trans Kalimantan Km 85
+PT Kalimantan Estate 2,farm,ID,Central Kalimantan,-1.2345,113.9876,320.0,Jl. Raya Sampit Km 45
+Daloa Cooperative Farm,farm,CI,Sassandra-Marahoue,6.8771,-6.4502,85.0,Route de Daloa Soubre
+Nyungwe Coffee Station,farm,RW,Southern Province,-2.4567,29.2345,45.0,Nyungwe Forest Road Huye
+Accra Cocoa Processing,factory,GH,Greater Accra,5.6037,-0.1870,3.2,Industrial Area Tema
+Rotterdam Import Terminal,warehouse,NL,South Holland,51.9225,4.4792,1.5,Europaweg 800 Rotterdam
+Hamburg Logistics Center,warehouse,DE,Hamburg,53.5511,9.9937,2.8,Am Sandtorkai 50 Hamburg
+Santos Export Port,port,BR,Sao Paulo,-23.9618,-46.3322,0.5,Porto de Santos Terminal 4
+Asuncion Wood Mill,factory,PY,Central,-25.2637,-57.5759,8.5,Ruta 2 Km 30 San Lorenzo
+Kuching Rubber Processing,factory,MY,Sarawak,1.5497,110.3634,12.0,Jl. Pending Industrial
+Addis Ababa Coffee Warehouse,warehouse,ET,Addis Ababa,9.0054,38.7636,1.8,Bole Sub City Addis Ababa
+Bogota Cattle Hub,warehouse,CO,Bogota,4.7110,-74.0721,4.5,Zona Franca de Bogota
+Sinop Soya Silo,warehouse,BR,Mato Grosso,-11.8642,-55.5064,15.0,Rod. BR-163 Km 830

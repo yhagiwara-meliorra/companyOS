@@ -16,9 +16,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Building2, Plus, Upload, ExternalLink } from "lucide-react";
+import { Building2, Plus, ExternalLink } from "lucide-react";
 import { OrgCsvImportForm } from "./org-csv-import-form";
 import { ORG_TYPE_LABELS, ROLE_LABELS } from "@/lib/labels";
+import { canEdit } from "@/lib/auth/roles";
 
 export default async function OrgsListPage({
   params,
@@ -54,6 +55,7 @@ export default async function OrgsListPage({
     .order("created_at", { ascending: false });
 
   const orgs = links ?? [];
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   return (
     <div className="space-y-6">
@@ -61,15 +63,17 @@ export default async function OrgsListPage({
         title="組織"
         description="バイヤー・サプライヤー組織を管理"
         actions={
-          <div className="flex items-center gap-2">
-            <OrgCsvImportForm workspaceSlug={workspaceSlug} />
-            <Button asChild>
-              <Link href={`/app/${workspaceSlug}/orgs/new`}>
-                <Plus className="mr-2 h-4 w-4" />
-                組織を追加
-              </Link>
-            </Button>
-          </div>
+          hasEditAccess ? (
+            <div className="flex items-center gap-2">
+              <OrgCsvImportForm workspaceSlug={workspaceSlug} />
+              <Button asChild>
+                <Link href={`/app/${workspaceSlug}/orgs/new`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  組織を追加
+                </Link>
+              </Button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -79,12 +83,14 @@ export default async function OrgsListPage({
           title="組織がありません"
           description="最初の組織を追加して、サプライチェーンネットワークの構築を始めましょう。"
           action={
-            <Button asChild>
-              <Link href={`/app/${workspaceSlug}/orgs/new`}>
-                <Plus className="mr-2 h-4 w-4" />
-                組織を追加
-              </Link>
-            </Button>
+            hasEditAccess ? (
+              <Button asChild>
+                <Link href={`/app/${workspaceSlug}/orgs/new`}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  組織を追加
+                </Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (

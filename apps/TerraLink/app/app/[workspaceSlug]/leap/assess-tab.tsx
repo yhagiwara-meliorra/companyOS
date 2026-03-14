@@ -69,6 +69,7 @@ function scoreColor(score: number): string {
 }
 
 type Props = {
+  canEdit?: boolean;
   workspaceSlug: string;
   scopes: ScopeRow[];
   risks: RiskRow[];
@@ -78,6 +79,7 @@ type Props = {
 };
 
 export function AssessTab({
+  canEdit = false,
   workspaceSlug,
   scopes,
   risks,
@@ -195,55 +197,57 @@ export function AssessTab({
                 評価を通じて特定された自然関連リスク
               </CardDescription>
             </div>
-            <Dialog open={riskOpen} onOpenChange={setRiskOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline" disabled={scopes.length === 0}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  リスクを追加
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>リスクを追加</DialogTitle>
-                </DialogHeader>
-                <form action={handleAddRisk} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>スコープ</Label>
-                    <select name="assessmentScopeId" required className={selectCn}>
-                      <option value="">スコープを選択...</option>
-                      {scopes.map((s) => (
-                        <option key={s.id} value={s.id}>{scopeName(s.id)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>リスク種別</Label>
-                    <select name="riskType" required className={selectCn}>
-                      <option value="">種別を選択...</option>
-                      <option value="physical">物理的</option>
-                      <option value="transition">移行</option>
-                      <option value="systemic">システミック</option>
-                      <option value="reputational">レピュテーション</option>
-                      <option value="legal">法的</option>
-                      <option value="market">市場</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>タイトル</Label>
-                    <Input name="title" placeholder="リスクのタイトル" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>説明</Label>
-                    <Textarea name="description" placeholder="リスクの詳細を記載..." required />
-                  </div>
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {canEdit && (
+              <Dialog open={riskOpen} onOpenChange={setRiskOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={scopes.length === 0}>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
                     リスクを追加
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>リスクを追加</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleAddRisk} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>スコープ</Label>
+                      <select name="assessmentScopeId" required className={selectCn}>
+                        <option value="">スコープを選択...</option>
+                        {scopes.map((s) => (
+                          <option key={s.id} value={s.id}>{scopeName(s.id)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>リスク種別</Label>
+                      <select name="riskType" required className={selectCn}>
+                        <option value="">種別を選択...</option>
+                        <option value="physical">物理的</option>
+                        <option value="transition">移行</option>
+                        <option value="systemic">システミック</option>
+                        <option value="reputational">レピュテーション</option>
+                        <option value="legal">法的</option>
+                        <option value="market">市場</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>タイトル</Label>
+                      <Input name="title" placeholder="リスクのタイトル" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>説明</Label>
+                      <Textarea name="description" placeholder="リスクの詳細を記載..." required />
+                    </div>
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      リスクを追加
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -260,7 +264,7 @@ export function AssessTab({
                   <TableHead>種別</TableHead>
                   <TableHead>スコープ</TableHead>
                   <TableHead className="text-right">スコア</TableHead>
-                  <TableHead>操作</TableHead>
+                  {canEdit && <TableHead>操作</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -302,35 +306,37 @@ export function AssessTab({
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => {
-                              setSelectedRiskId(risk.id);
-                              setScoreOpen(true);
-                            }}
-                          >
-                            スコア
-                          </Button>
-                          {risk.status === "open" && (
-                            <select
-                              className="h-7 w-[100px] rounded-md border border-input bg-transparent px-2 text-xs"
-                              defaultValue=""
-                              onChange={(e) => {
-                                if (e.target.value) handleStatusChange(risk.id, e.target.value);
+                      {canEdit && (
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => {
+                                setSelectedRiskId(risk.id);
+                                setScoreOpen(true);
                               }}
                             >
-                              <option value="">状態変更...</option>
-                              <option value="accepted">受容</option>
-                              <option value="mitigating">緩和中</option>
-                              <option value="closed">完了</option>
-                            </select>
-                          )}
-                        </div>
-                      </TableCell>
+                              スコア
+                            </Button>
+                            {risk.status === "open" && (
+                              <select
+                                className="h-7 w-[100px] rounded-md border border-input bg-transparent px-2 text-xs"
+                                defaultValue=""
+                                onChange={(e) => {
+                                  if (e.target.value) handleStatusChange(risk.id, e.target.value);
+                                }}
+                              >
+                                <option value="">状態変更...</option>
+                                <option value="accepted">受容</option>
+                                <option value="mitigating">緩和中</option>
+                                <option value="closed">完了</option>
+                              </select>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -341,50 +347,52 @@ export function AssessTab({
       </Card>
 
       {/* Score Dialog */}
-      <Dialog open={scoreOpen} onOpenChange={setScoreOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>リスクスコアリング</DialogTitle>
-          </DialogHeader>
-          <form action={handleScoreRisk} className="space-y-4">
-            <input type="hidden" name="riskId" value={selectedRiskId ?? ""} />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>
-                  重大度 <span className="text-muted-foreground">(0-10)</span>
-                </Label>
-                <Input name="severity" type="number" min="0" max="10" step="0.5" required placeholder="0-10" />
+      {canEdit && (
+        <Dialog open={scoreOpen} onOpenChange={setScoreOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>リスクスコアリング</DialogTitle>
+            </DialogHeader>
+            <form action={handleScoreRisk} className="space-y-4">
+              <input type="hidden" name="riskId" value={selectedRiskId ?? ""} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>
+                    重大度 <span className="text-muted-foreground">(0-10)</span>
+                  </Label>
+                  <Input name="severity" type="number" min="0" max="10" step="0.5" required placeholder="0-10" />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    発生可能性 <span className="text-muted-foreground">(0-10)</span>
+                  </Label>
+                  <Input name="likelihood" type="number" min="0" max="10" step="0.5" required placeholder="0-10" />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    速度 <span className="text-muted-foreground">(任意)</span>
+                  </Label>
+                  <Input name="velocity" type="number" min="0" max="10" step="0.5" placeholder="0-10" />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    検出可能性 <span className="text-muted-foreground">(任意)</span>
+                  </Label>
+                  <Input name="detectability" type="number" min="0" max="10" step="0.5" placeholder="0-10" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>
-                  発生可能性 <span className="text-muted-foreground">(0-10)</span>
-                </Label>
-                <Input name="likelihood" type="number" min="0" max="10" step="0.5" required placeholder="0-10" />
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  速度 <span className="text-muted-foreground">(任意)</span>
-                </Label>
-                <Input name="velocity" type="number" min="0" max="10" step="0.5" placeholder="0-10" />
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  検出可能性 <span className="text-muted-foreground">(任意)</span>
-                </Label>
-                <Input name="detectability" type="number" min="0" max="10" step="0.5" placeholder="0-10" />
-              </div>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              最終スコア = 重大度 × 発生可能性 (0-100)
-            </p>
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button type="submit" disabled={isPending} className="w-full">
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              スコアを保存
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+              <p className="text-xs text-muted-foreground">
+                最終スコア = 重大度 × 発生可能性 (0-100)
+              </p>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              <Button type="submit" disabled={isPending} className="w-full">
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                スコアを保存
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Risk Score Heatmap */}
       {riskScores.length > 0 && (

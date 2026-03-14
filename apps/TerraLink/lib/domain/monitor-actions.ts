@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 
 export type ActionState = { error?: string; success?: boolean };
 
@@ -58,6 +59,14 @@ export async function createMonitoringRule(
     config.stale_days = Number(formData.get("staleDays")) || 90;
   } else if (ruleType === "review_due") {
     config.review_days = Number(formData.get("reviewDays")) || 60;
+  } else if (ruleType === "benchmark_change") {
+    const codes = (formData.get("countryCodes") as string) ?? "";
+    config.country_codes = codes
+      .split(",")
+      .map((c: string) => c.trim().toUpperCase())
+      .filter(Boolean);
+  } else if (ruleType === "eudr_risk_review") {
+    config.review_days = Number(formData.get("reviewDays")) || 30;
   }
 
   const { error } = await admin.from("monitoring_rules").insert({
@@ -69,6 +78,10 @@ export async function createMonitoringRule(
   });
 
   if (error) return { error: error.message };
+
+  await appendChangeLog(ws.id, user.id, "monitoring_rules", ws.id, "insert", null, {
+    target_type: targetType, rule_type: ruleType, config,
+  });
 
   revalidatePath(`/app/${workspaceSlug}/monitor`);
   return { success: true };
@@ -92,6 +105,13 @@ export async function toggleMonitoringRule(
     .eq("id", ruleId);
 
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(admin, workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "monitoring_rules", ruleId, "update", null, {
+      is_active: isActive,
+    });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/monitor`);
   return { success: true };
@@ -121,6 +141,13 @@ export async function updateEventStatus(
 
   if (error) return { error: error.message };
 
+  const ws = await resolveWorkspace(admin, workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "monitoring_events", eventId, "status_change", null, {
+      status, resolved_at: status === "resolved" ? new Date().toISOString() : null,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/monitor`);
   return { success: true };
 }
@@ -142,6 +169,11 @@ export async function deleteMonitoringRule(
     .eq("id", ruleId);
 
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(admin, workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "monitoring_rules", ruleId, "delete");
+  }
 
   revalidatePath(`/app/${workspaceSlug}/monitor`);
   return { success: true };

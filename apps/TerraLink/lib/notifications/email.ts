@@ -51,9 +51,10 @@ export async function sendAlertEmail(
 ): Promise<{ success: boolean; error?: string }> {
   const enabled = process.env.EMAIL_ENABLED === "true";
   if (!enabled) {
-    console.log(
-      `[email] Skipping email (EMAIL_ENABLED != true): ${payload.events.length} events → ${payload.to}`
-    );
+    if (process.env.NODE_ENV === "development")
+      console.log(
+        `[email] Skipping email (EMAIL_ENABLED != true): ${payload.events.length} events → ${payload.to}`
+      );
     return { success: true };
   }
 

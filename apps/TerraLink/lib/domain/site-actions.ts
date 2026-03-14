@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 import { z } from "zod/v4";
 
 // ── Schemas ─────────────────────────────────────────────────
@@ -10,13 +11,14 @@ const SiteSchema = z.object({
   name: z.string().min(1, "サイト名は必須です"),
   siteType: z.enum([
     "farm",
-    "plantation",
     "factory",
     "warehouse",
     "port",
     "mine",
     "office",
-    "other",
+    "project_site",
+    "store",
+    "unknown",
   ]),
   countryCode: z.string().max(3).optional(),
   regionAdmin1: z.string().optional(),
@@ -75,14 +77,15 @@ export async function createSite(
   const { data: site, error: siteErr } = await admin
     .from("sites")
     .insert({
-      name,
+      site_name: name,
       site_type: siteType,
       country_code: countryCode || null,
-      region_admin1: regionAdmin1 || null,
-      lat: lat ?? null,
-      lng: lng ?? null,
+      region: regionAdmin1 || null,
+      latitude: lat ?? null,
+      longitude: lng ?? null,
       area_ha: areaHa ?? null,
-      address: address || null,
+      address_text: address || null,
+      verification_status: "declared",
     })
     .select("id")
     .single();
@@ -95,7 +98,7 @@ export async function createSite(
     .insert({
       organization_id: orgId,
       site_id: site.id,
-      role: "operator",
+      ownership_role: "operator",
     });
 
   if (orgSiteErr) return { error: orgSiteErr.message };
@@ -106,10 +109,17 @@ export async function createSite(
     .insert({
       workspace_id: ws.id,
       site_id: site.id,
-      visibility: "full",
+      scope_role: "own_operation",
+      verification_status: "declared",
     });
 
   if (wsSiteErr) return { error: wsSiteErr.message };
+
+  await appendChangeLog(ws.id, user.id, "sites", site.id, "insert", null, {
+    name,
+    site_type: siteType,
+    country_code: countryCode,
+  });
 
   revalidatePath(`/app/${workspaceSlug}/sites`);
   return { success: true };
@@ -145,18 +155,32 @@ export async function updateSite(
   const { error } = await admin
     .from("sites")
     .update({
-      name: parsed.data.name,
+      site_name: parsed.data.name,
       site_type: parsed.data.siteType,
       country_code: parsed.data.countryCode || null,
-      region_admin1: parsed.data.regionAdmin1 || null,
-      lat: parsed.data.lat ?? null,
-      lng: parsed.data.lng ?? null,
+      region: parsed.data.regionAdmin1 || null,
+      latitude: parsed.data.lat ?? null,
+      longitude: parsed.data.lng ?? null,
       area_ha: parsed.data.areaHa ?? null,
-      address: parsed.data.address || null,
+      address_text: parsed.data.address || null,
     })
     .eq("id", siteId);
 
   if (error) return { error: error.message };
+
+  const adminForWs = createAdminClient();
+  const { data: wsForLog } = await adminForWs
+    .from("workspaces")
+    .select("id")
+    .eq("slug", workspaceSlug)
+    .is("deleted_at", null)
+    .single();
+  if (wsForLog) {
+    await appendChangeLog(wsForLog.id, user.id, "sites", siteId, "update", null, {
+      name: parsed.data.name,
+      site_type: parsed.data.siteType,
+    });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/sites`);
   return { success: true };
@@ -201,7 +225,7 @@ export async function importSitesCsv(
 
   if (rows.length === 0) return { error: "CSVにデータ行がありません" };
 
-  const missing = validateHeaders(headers, ["name", "site_type"]);
+  const missing = validateHeaders(headers, ["site_name", "site_type"]);
   if (missing.length > 0)
     return { error: `必須カラムが不足しています: ${missing.join(", ")}` };
 
@@ -225,14 +249,15 @@ export async function importSitesCsv(
 
     // 1. Build site payloads
     const sitePayloads = batch.map((row) => ({
-      name: row.name || "Unnamed",
-      site_type: row.site_type || "other",
+      site_name: row.site_name || "Unnamed",
+      site_type: row.site_type || "unknown",
       country_code: row.country_code || null,
-      region_admin1: row.region_admin1 || null,
-      lat: row.lat ? parseFloat(row.lat) : null,
-      lng: row.lng ? parseFloat(row.lng) : null,
+      region: row.region || null,
+      latitude: row.latitude ? parseFloat(row.latitude) : null,
+      longitude: row.longitude ? parseFloat(row.longitude) : null,
       area_ha: row.area_ha ? parseFloat(row.area_ha) : null,
-      address: row.address || null,
+      address_text: row.address_text || null,
+      verification_status: "inferred" as const,
     }));
 
     // 2. Batch insert sites
@@ -254,7 +279,7 @@ export async function importSitesCsv(
     const orgSitePayloads = insertedSites.map((site) => ({
       organization_id: orgId,
       site_id: site.id,
-      role: "operator" as const,
+      ownership_role: "operator" as const,
     }));
 
     const { error: orgLinkErr } = await admin
@@ -269,7 +294,8 @@ export async function importSitesCsv(
     const wsSitePayloads = insertedSites.map((site) => ({
       workspace_id: ws.id,
       site_id: site.id,
-      visibility: "full" as const,
+      scope_role: "own_operation" as const,
+      verification_status: "inferred" as const,
     }));
 
     const { error: wsLinkErr } = await admin
@@ -281,6 +307,15 @@ export async function importSitesCsv(
     }
 
     imported += insertedSites.length;
+  }
+
+  if (imported > 0) {
+    await appendChangeLog(ws.id, user.id, "sites", ws.id, "insert", null, {
+      action: "csv_import",
+      imported,
+      failed,
+      total: rows.length,
+    });
   }
 
   revalidatePath(`/app/${workspaceSlug}/sites`);
@@ -315,14 +350,15 @@ async function insertSiteRowByRow(
     const { data: site, error: siteErr } = await admin
       .from("sites")
       .insert({
-        name: row.name || "Unnamed",
-        site_type: row.site_type || "other",
+        site_name: row.site_name || "Unnamed",
+        site_type: row.site_type || "unknown",
         country_code: row.country_code || null,
-        region_admin1: row.region_admin1 || null,
-        lat: row.lat ? parseFloat(row.lat) : null,
-        lng: row.lng ? parseFloat(row.lng) : null,
+        region: row.region || null,
+        latitude: row.latitude ? parseFloat(row.latitude) : null,
+        longitude: row.longitude ? parseFloat(row.longitude) : null,
         area_ha: row.area_ha ? parseFloat(row.area_ha) : null,
-        address: row.address || null,
+        address_text: row.address_text || null,
+        verification_status: "inferred" as const,
       })
       .select("id")
       .single();
@@ -336,13 +372,14 @@ async function insertSiteRowByRow(
     await admin.from("organization_sites").insert({
       organization_id: orgId,
       site_id: site.id,
-      role: "operator",
+      ownership_role: "operator",
     });
 
     await admin.from("workspace_sites").insert({
       workspace_id: workspaceId,
       site_id: site.id,
-      visibility: "full",
+      scope_role: "own_operation",
+      verification_status: "inferred",
     });
 
     imported++;

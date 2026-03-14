@@ -32,7 +32,8 @@ import {
   Building2,
 } from "lucide-react";
 import { OrgForm } from "../org-form";
-import { ORG_TYPE_LABELS, ROLE_LABELS, SITE_TYPE_LABELS, SITE_ROLE_LABELS } from "@/lib/labels";
+import { ORG_TYPE_LABELS, ROLE_LABELS, SITE_TYPE_LABELS, OWNERSHIP_ROLE_LABELS, RELATIONSHIP_TYPE_LABELS } from "@/lib/labels";
+import { canEdit } from "@/lib/auth/roles";
 
 export default async function OrgDetailPage({
   params,
@@ -53,13 +54,14 @@ export default async function OrgDetailPage({
     .single();
   if (!org) notFound();
 
-  // Get workspace link
+  // Verify org belongs to this workspace
   const { data: link } = await admin
     .from("workspace_organizations")
     .select("*")
     .eq("workspace_id", ctx.workspace.id)
     .eq("organization_id", orgId)
     .single();
+  if (!link) notFound();
 
   // Get linked sites
   const { data: orgSites } = await admin
@@ -67,57 +69,59 @@ export default async function OrgDetailPage({
     .select(
       `
       id,
-      role,
+      ownership_role,
       sites (
         id,
-        name,
+        site_name,
         site_type,
         country_code,
-        lat,
-        lng
+        latitude,
+        longitude
       )
     `
     )
     .eq("organization_id", orgId);
 
-  // Get supply relationships where this org is buyer or supplier
+  // Get supply relationships where this org is the "to" side (i.e. this org is the supplier)
   const { data: asSupplier } = await admin
     .from("supply_relationships")
     .select(
       `
       id,
       tier,
-      status,
+      relationship_type,
       verification_status,
-      buyer:organizations!supply_relationships_buyer_org_id_fkey (
+      from_ws_org:workspace_organizations!supply_relationships_from_workspace_org_id_fkey (
         id,
-        display_name
+        organizations ( id, display_name )
       )
     `
     )
-    .eq("supplier_org_id", orgId)
+    .eq("to_workspace_org_id", link.id)
     .eq("workspace_id", ctx.workspace.id)
-    .eq("status", "active");
+    .is("deleted_at", null);
 
+  // Get supply relationships where this org is the "from" side (i.e. this org is the buyer)
   const { data: asBuyer } = await admin
     .from("supply_relationships")
     .select(
       `
       id,
       tier,
-      status,
+      relationship_type,
       verification_status,
-      supplier:organizations!supply_relationships_supplier_org_id_fkey (
+      to_ws_org:workspace_organizations!supply_relationships_to_workspace_org_id_fkey (
         id,
-        display_name
+        organizations ( id, display_name )
       )
     `
     )
-    .eq("buyer_org_id", orgId)
+    .eq("from_workspace_org_id", link.id)
     .eq("workspace_id", ctx.workspace.id)
-    .eq("status", "active");
+    .is("deleted_at", null);
 
   const sites = orgSites ?? [];
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   return (
     <div className="space-y-6">
@@ -199,19 +203,21 @@ export default async function OrgDetailPage({
         </Card>
 
         {/* Edit Form */}
-        <div className="lg:col-span-2">
-          <OrgForm
-            workspaceSlug={workspaceSlug}
-            org={{
-              id: org.id,
-              legal_name: org.legal_name,
-              display_name: org.display_name,
-              org_type: org.org_type,
-              country_code: org.country_code,
-              website: org.website,
-            }}
-          />
-        </div>
+        {hasEditAccess && (
+          <div className="lg:col-span-2">
+            <OrgForm
+              workspaceSlug={workspaceSlug}
+              org={{
+                id: org.id,
+                legal_name: org.legal_name,
+                display_name: org.display_name,
+                org_type: org.org_type,
+                country_code: org.country_code,
+                website: org.website,
+              }}
+            />
+          </div>
+        )}
       </div>
 
       <Separator />
@@ -247,11 +253,11 @@ export default async function OrgDetailPage({
                 {sites.map((os) => {
                   const site = os.sites as unknown as {
                     id: string;
-                    name: string;
+                    site_name: string;
                     site_type: string;
                     country_code: string | null;
-                    lat: number | null;
-                    lng: number | null;
+                    latitude: number | null;
+                    longitude: number | null;
                   };
                   if (!site) return null;
                   return (
@@ -261,7 +267,7 @@ export default async function OrgDetailPage({
                           href={`/app/${workspaceSlug}/sites/${site.id}`}
                           className="font-medium hover:text-primary"
                         >
-                          {site.name}
+                          {site.site_name}
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -269,11 +275,11 @@ export default async function OrgDetailPage({
                           {SITE_TYPE_LABELS[site.site_type] ?? site.site_type}
                         </Badge>
                       </TableCell>
-                      <TableCell>{SITE_ROLE_LABELS[os.role] ?? os.role}</TableCell>
+                      <TableCell>{OWNERSHIP_ROLE_LABELS[os.ownership_role] ?? os.ownership_role}</TableCell>
                       <TableCell>{site.country_code}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {site.lat != null && site.lng != null
-                          ? `${site.lat.toFixed(4)}, ${site.lng.toFixed(4)}`
+                        {site.latitude != null && site.longitude != null
+                          ? `${site.latitude.toFixed(4)}, ${site.longitude.toFixed(4)}`
                           : "—"}
                       </TableCell>
                     </TableRow>
@@ -299,18 +305,20 @@ export default async function OrgDetailPage({
               <p className="mb-2 text-sm font-medium">サプライヤー</p>
               <div className="space-y-1">
                 {asBuyer!.map((rel) => {
-                  const supplier = rel.supplier as unknown as {
-                    id: string;
-                    display_name: string;
-                  } | null;
+                  const toOrg = (rel.to_ws_org as unknown as {
+                    organizations: { id: string; display_name: string } | null;
+                  } | null)?.organizations;
                   return (
                     <div
                       key={rel.id}
                       className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
                     >
                       <span className="flex-1 font-medium">
-                        {supplier?.display_name ?? "不明"}
+                        {toOrg?.display_name ?? "不明"}
                       </span>
+                      <Badge variant="outline">
+                        {RELATIONSHIP_TYPE_LABELS[rel.relationship_type] ?? rel.relationship_type}
+                      </Badge>
                       <TierBadge tier={rel.tier} />
                       <VerificationBadge
                         status={
@@ -331,18 +339,20 @@ export default async function OrgDetailPage({
               <p className="mb-2 text-sm font-medium">バイヤー</p>
               <div className="space-y-1">
                 {asSupplier!.map((rel) => {
-                  const buyer = rel.buyer as unknown as {
-                    id: string;
-                    display_name: string;
-                  } | null;
+                  const fromOrg = (rel.from_ws_org as unknown as {
+                    organizations: { id: string; display_name: string } | null;
+                  } | null)?.organizations;
                   return (
                     <div
                       key={rel.id}
                       className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm"
                     >
                       <span className="flex-1 font-medium">
-                        {buyer?.display_name ?? "不明"}
+                        {fromOrg?.display_name ?? "不明"}
                       </span>
+                      <Badge variant="outline">
+                        {RELATIONSHIP_TYPE_LABELS[rel.relationship_type] ?? rel.relationship_type}
+                      </Badge>
                       <TierBadge tier={rel.tier} />
                       <VerificationBadge
                         status={

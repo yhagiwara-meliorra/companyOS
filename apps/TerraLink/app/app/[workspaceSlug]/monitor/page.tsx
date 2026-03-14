@@ -3,6 +3,7 @@ import { getWorkspaceContext } from "@/lib/auth/workspace-context";
 import { createAdminClient } from "@/lib/db/admin";
 import { PageHeader } from "@/components/page-header";
 import { MonitorDashboard } from "./monitor-dashboard";
+import { canEdit } from "@/lib/auth/roles";
 
 export default async function MonitorPage({
   params,
@@ -12,6 +13,8 @@ export default async function MonitorPage({
   const { workspaceSlug } = await params;
   const ctx = await getWorkspaceContext(workspaceSlug);
   if (!ctx) notFound();
+
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   const admin = createAdminClient();
 
@@ -38,7 +41,7 @@ export default async function MonitorPage({
   // Load orgs and sites for creating rules with context
   const { data: wsOrgs } = await admin
     .from("workspace_organizations")
-    .select("organization_id, organizations ( id, org_name )")
+    .select("organization_id, organizations ( id, display_name )")
     .eq("workspace_id", ctx.workspace.id);
 
   const { data: wsSites } = await admin
@@ -50,9 +53,9 @@ export default async function MonitorPage({
     .map((wo) => {
       const org = wo.organizations as unknown as {
         id: string;
-        org_name: string;
+        display_name: string;
       };
-      return { id: org?.id ?? "", name: org?.org_name ?? "Unknown" };
+      return { id: org?.id ?? "", name: org?.display_name ?? "Unknown" };
     })
     .filter((o) => o.id);
 
@@ -78,6 +81,7 @@ export default async function MonitorPage({
         events={events}
         orgOptions={orgOptions}
         siteOptions={siteOptions}
+        canEdit={hasEditAccess}
       />
     </div>
   );

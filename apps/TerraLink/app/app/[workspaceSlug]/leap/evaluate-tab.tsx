@@ -82,6 +82,7 @@ const TOPIC_GROUP_COLOR: Record<string, string> = {
 };
 
 type Props = {
+  canEdit?: boolean;
   workspaceSlug: string;
   scopes: ScopeRow[];
   dependencies: DependencyRow[];
@@ -92,6 +93,7 @@ type Props = {
 };
 
 export function EvaluateTab({
+  canEdit = false,
   workspaceSlug,
   scopes,
   dependencies,
@@ -146,7 +148,7 @@ export function EvaluateTab({
   return (
     <div className="space-y-6">
       {/* Template Action */}
-      {scopes.length > 0 && (
+      {canEdit && scopes.length > 0 && (
         <Card className="border-dashed">
           <CardContent className="flex items-center justify-between py-4">
             <div className="flex items-center gap-3">
@@ -206,58 +208,60 @@ export function EvaluateTab({
                 事業プロセスが生態系サービスにどう依存しているか
               </CardDescription>
             </div>
-            <Dialog open={depOpen} onOpenChange={setDepOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline" disabled={scopes.length === 0}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  追加
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>依存関係を追加</DialogTitle>
-                </DialogHeader>
-                <form action={handleAddDep} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>スコープ</Label>
-                    <select name="assessmentScopeId" required className={selectCn}>
-                      <option value="">スコープを選択...</option>
-                      {scopes.map((s) => (
-                        <option key={s.id} value={s.id}>{scopeName(s.id)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>自然トピック</Label>
-                    <select name="natureTopicId" required className={selectCn}>
-                      <option value="">トピックを選択...</option>
-                      {natureTopics.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>依存度</Label>
-                    <select name="dependencyLevel" defaultValue="unknown" className={selectCn}>
-                      <option value="high">高</option>
-                      <option value="medium">中</option>
-                      <option value="low">低</option>
-                      <option value="unknown">不明</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>根拠</Label>
-                    <Input name="rationale" placeholder="簡潔な理由を記載" />
-                  </div>
-                  <input type="hidden" name="sourceType" value="manual" />
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    依存関係を追加
+            {canEdit && (
+              <Dialog open={depOpen} onOpenChange={setDepOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={scopes.length === 0}>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    追加
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>依存関係を追加</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleAddDep} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>スコープ</Label>
+                      <select name="assessmentScopeId" required className={selectCn}>
+                        <option value="">スコープを選択...</option>
+                        {scopes.map((s) => (
+                          <option key={s.id} value={s.id}>{scopeName(s.id)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>自然トピック</Label>
+                      <select name="natureTopicId" required className={selectCn}>
+                        <option value="">トピックを選択...</option>
+                        {natureTopics.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>依存度</Label>
+                      <select name="dependencyLevel" defaultValue="unknown" className={selectCn}>
+                        <option value="high">高</option>
+                        <option value="medium">中</option>
+                        <option value="low">低</option>
+                        <option value="unknown">不明</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>根拠</Label>
+                      <Input name="rationale" placeholder="簡潔な理由を記載" />
+                    </div>
+                    <input type="hidden" name="sourceType" value="manual" />
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      依存関係を追加
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -315,69 +319,71 @@ export function EvaluateTab({
                 事業活動が生態系と生物多様性に与える影響
               </CardDescription>
             </div>
-            <Dialog open={impOpen} onOpenChange={setImpOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline" disabled={scopes.length === 0}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  追加
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>影響を追加</DialogTitle>
-                </DialogHeader>
-                <form action={handleAddImpact} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>スコープ</Label>
-                    <select name="assessmentScopeId" required className={selectCn}>
-                      <option value="">スコープを選択...</option>
-                      {scopes.map((s) => (
-                        <option key={s.id} value={s.id}>{scopeName(s.id)}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>自然トピック</Label>
-                    <select name="natureTopicId" required className={selectCn}>
-                      <option value="">トピックを選択...</option>
-                      {natureTopics.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>方向性</Label>
-                      <select name="impactDirection" defaultValue="unknown" className={selectCn}>
-                        <option value="negative">ネガティブ</option>
-                        <option value="positive">ポジティブ</option>
-                        <option value="mixed">混合</option>
-                        <option value="unknown">不明</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>レベル</Label>
-                      <select name="impactLevel" defaultValue="unknown" className={selectCn}>
-                        <option value="high">高</option>
-                        <option value="medium">中</option>
-                        <option value="low">低</option>
-                        <option value="unknown">不明</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>根拠</Label>
-                    <Input name="rationale" placeholder="簡潔な理由を記載" />
-                  </div>
-                  <input type="hidden" name="sourceType" value="manual" />
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    影響を追加
+            {canEdit && (
+              <Dialog open={impOpen} onOpenChange={setImpOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline" disabled={scopes.length === 0}>
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    追加
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>影響を追加</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleAddImpact} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>スコープ</Label>
+                      <select name="assessmentScopeId" required className={selectCn}>
+                        <option value="">スコープを選択...</option>
+                        {scopes.map((s) => (
+                          <option key={s.id} value={s.id}>{scopeName(s.id)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>自然トピック</Label>
+                      <select name="natureTopicId" required className={selectCn}>
+                        <option value="">トピックを選択...</option>
+                        {natureTopics.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>方向性</Label>
+                        <select name="impactDirection" defaultValue="unknown" className={selectCn}>
+                          <option value="negative">ネガティブ</option>
+                          <option value="positive">ポジティブ</option>
+                          <option value="mixed">混合</option>
+                          <option value="unknown">不明</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>レベル</Label>
+                        <select name="impactLevel" defaultValue="unknown" className={selectCn}>
+                          <option value="high">高</option>
+                          <option value="medium">中</option>
+                          <option value="low">低</option>
+                          <option value="unknown">不明</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>根拠</Label>
+                      <Input name="rationale" placeholder="簡潔な理由を記載" />
+                    </div>
+                    <input type="hidden" name="sourceType" value="manual" />
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      影響を追加
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>

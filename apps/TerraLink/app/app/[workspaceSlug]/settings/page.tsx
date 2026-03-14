@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/auth/workspace-context";
 import { createClient } from "@/lib/auth/supabase-server";
 import { InviteMemberForm } from "./invite-member-form";
+import { isAdmin } from "@/lib/auth/roles";
 
 export default async function SettingsPage({
   params,
@@ -18,7 +19,7 @@ export default async function SettingsPage({
     .select("id, user_id, role, status, profiles(full_name)")
     .eq("workspace_id", ctx.workspace.id);
 
-  const isAdmin = ["owner", "admin"].includes(ctx.membership.role);
+  const hasAdminAccess = isAdmin(ctx.membership.role);
 
   return (
     <div className="space-y-8">
@@ -76,7 +77,7 @@ export default async function SettingsPage({
       </section>
 
       {/* Invite form — only for owner/admin */}
-      {isAdmin && (
+      {hasAdminAccess && (
         <section>
           <h3 className="text-lg font-semibold">メンバーを招待</h3>
           <InviteMemberForm workspaceId={ctx.workspace.id} />

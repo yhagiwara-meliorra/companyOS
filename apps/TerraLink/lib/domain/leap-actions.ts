@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 import { z } from "zod/v4";
 
 export type ActionState = { error?: string; success?: boolean };
@@ -117,6 +118,10 @@ export async function createAssessment(
 
   if (error) return { error: error.message };
 
+  await appendChangeLog(ws.id, user.id, "assessments", data.id, "insert", null, {
+    assessment_cycle: parsed.data.assessmentCycle, status: parsed.data.status,
+  });
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true, assessmentId: data.id };
 }
@@ -140,6 +145,11 @@ export async function updateAssessmentStatus(
     .update(updates)
     .eq("id", assessmentId);
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "assessments", assessmentId, "status_change", null, { status });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
@@ -184,6 +194,13 @@ export async function addAssessmentScope(
   const { error } = await admin.from("assessment_scopes").insert(payload);
   if (error) return { error: error.message };
 
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "assessment_scopes", assessmentId, "insert", null, {
+      scope_type: scopeType, target_id: targetId,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
 }
@@ -218,6 +235,13 @@ export async function addDependency(
   });
   if (error) return { error: error.message };
 
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "dependencies", parsed.data.assessmentScopeId, "insert", null, {
+      nature_topic_id: parsed.data.natureTopicId, dependency_level: parsed.data.dependencyLevel,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
 }
@@ -236,6 +260,13 @@ export async function updateDependencyLevel(
     .update({ dependency_level: level })
     .eq("id", dependencyId);
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "dependencies", dependencyId, "update", null, {
+      dependency_level: level,
+    });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
@@ -273,6 +304,13 @@ export async function addImpact(
   });
   if (error) return { error: error.message };
 
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "impacts", parsed.data.assessmentScopeId, "insert", null, {
+      nature_topic_id: parsed.data.natureTopicId, impact_level: parsed.data.impactLevel,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
 }
@@ -292,6 +330,13 @@ export async function updateImpactLevel(
     .update({ impact_level: level, impact_direction: direction })
     .eq("id", impactId);
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "impacts", impactId, "update", null, {
+      impact_level: level, impact_direction: direction,
+    });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
@@ -328,6 +373,13 @@ export async function addRisk(
     .single();
   if (error) return { error: error.message };
 
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "risk_register", data.id, "insert", null, {
+      risk_type: parsed.data.riskType, title: parsed.data.title,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true, riskId: data.id };
 }
@@ -346,6 +398,11 @@ export async function updateRiskStatus(
     .update({ status })
     .eq("id", riskId);
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "risk_register", riskId, "status_change", null, { status });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
@@ -387,6 +444,13 @@ export async function scoreRisk(
   });
   if (error) return { error: error.message };
 
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "risk_scores", parsed.data.riskId, "insert", null, {
+      severity: parsed.data.severity, likelihood: parsed.data.likelihood,
+    });
+  }
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
 }
@@ -421,6 +485,10 @@ export async function createDisclosure(
   });
   if (error) return { error: error.message };
 
+  await appendChangeLog(ws.id, user.id, "disclosures", ws.id, "insert", null, {
+    framework: parsed.data.framework, section_key: parsed.data.sectionKey,
+  });
+
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
 }
@@ -443,6 +511,13 @@ export async function updateDisclosure(
     .update(updates)
     .eq("id", disclosureId);
   if (error) return { error: error.message };
+
+  const ws = await resolveWorkspace(workspaceSlug);
+  if (ws) {
+    await appendChangeLog(ws.id, user.id, "disclosures", disclosureId, "update", null, {
+      status, content_length: contentMd.length,
+    });
+  }
 
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
@@ -477,6 +552,10 @@ export async function createMonitoringRule(
     config: parsed.data.config,
   });
   if (error) return { error: error.message };
+
+  await appendChangeLog(ws.id, user.id, "monitoring_rules", ws.id, "insert", null, {
+    target_type: parsed.data.targetType, rule_type: parsed.data.ruleType,
+  });
 
   revalidatePath(`/app/${workspaceSlug}/leap`);
   return { success: true };
@@ -532,16 +611,20 @@ export async function applyManufacturingTemplate(
     if (!topicId) continue;
 
     // Insert dependency
-    await admin.from("dependencies").insert({
+    const { error: depError } = await admin.from("dependencies").insert({
       assessment_scope_id: assessmentScopeId,
       nature_topic_id: topicId,
       dependency_level: tmpl.dependency,
       rationale: { text: `Manufacturing template: ${tmpl.topicKey}` },
       source_type: "template",
     });
+    if (depError) {
+      console.error(`[leap] dependency insert failed for ${tmpl.topicKey}:`, depError.message);
+      continue;
+    }
 
     // Insert impact
-    await admin.from("impacts").insert({
+    const { error: impError } = await admin.from("impacts").insert({
       assessment_scope_id: assessmentScopeId,
       nature_topic_id: topicId,
       impact_direction: tmpl.impactDirection,
@@ -549,6 +632,10 @@ export async function applyManufacturingTemplate(
       rationale: { text: `Manufacturing template: ${tmpl.topicKey}` },
       source_type: "template",
     });
+    if (impError) {
+      console.error(`[leap] impact insert failed for ${tmpl.topicKey}:`, impError.message);
+      continue;
+    }
 
     inserted++;
   }

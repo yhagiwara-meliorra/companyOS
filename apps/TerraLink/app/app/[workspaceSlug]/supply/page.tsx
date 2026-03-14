@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -23,7 +24,9 @@ import {
 } from "@/components/ui/table";
 import { Network, Plus, ArrowRight } from "lucide-react";
 import { AddRelationshipForm } from "./add-relationship-form";
-import { SUPPLY_STATUS_LABELS } from "@/lib/labels";
+import { NetworkGraph } from "@/components/supply/network-graph";
+import { RELATIONSHIP_TYPE_LABELS } from "@/lib/labels";
+import { canEdit } from "@/lib/auth/roles";
 
 export default async function SupplyPage({
   params,
@@ -43,24 +46,30 @@ export default async function SupplyPage({
       `
       id,
       tier,
-      status,
+      relationship_type,
       verification_status,
-      buyer:organizations!supply_relationships_buyer_org_id_fkey (
+      from_ws_org:workspace_organizations!supply_relationships_from_workspace_org_id_fkey (
         id,
-        display_name,
-        org_type,
-        country_code
+        organizations (
+          id,
+          display_name,
+          org_type,
+          country_code
+        )
       ),
-      supplier:organizations!supply_relationships_supplier_org_id_fkey (
+      to_ws_org:workspace_organizations!supply_relationships_to_workspace_org_id_fkey (
         id,
-        display_name,
-        org_type,
-        country_code
+        organizations (
+          id,
+          display_name,
+          org_type,
+          country_code
+        )
       )
     `
     )
     .eq("workspace_id", ctx.workspace.id)
-    .eq("status", "active")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   // Get supply edges
@@ -69,25 +78,25 @@ export default async function SupplyPage({
     .select(
       `
       id,
-      transport_mode,
+      flow_direction,
       verification_status,
       from_site:sites!supply_edges_from_site_id_fkey (
         id,
-        name,
+        site_name,
         country_code
       ),
       to_site:sites!supply_edges_to_site_id_fkey (
         id,
-        name,
+        site_name,
         country_code
       ),
       supply_relationships (
         id,
-        buyer:organizations!supply_relationships_buyer_org_id_fkey (
-          display_name
+        from_ws_org:workspace_organizations!supply_relationships_from_workspace_org_id_fkey (
+          organizations ( display_name )
         ),
-        supplier:organizations!supply_relationships_supplier_org_id_fkey (
-          display_name
+        to_ws_org:workspace_organizations!supply_relationships_to_workspace_org_id_fkey (
+          organizations ( display_name )
         )
       )
     `
@@ -97,7 +106,7 @@ export default async function SupplyPage({
   // Get available orgs for the add form
   const { data: orgLinks } = await admin
     .from("workspace_organizations")
-    .select("organization_id, organizations(id, display_name)")
+    .select("id, organization_id, organizations(id, display_name)")
     .eq("workspace_id", ctx.workspace.id)
     .eq("status", "active");
 
@@ -107,12 +116,14 @@ export default async function SupplyPage({
         id: string;
         display_name: string;
       };
-      return org;
+      if (!org) return null;
+      return { wsOrgId: l.id, name: org.display_name };
     })
-    .filter(Boolean);
+    .filter(Boolean) as { wsOrgId: string; name: string }[];
 
   const rels = relationships ?? [];
   const supplyEdges = edges ?? [];
+  const hasEditAccess = canEdit(ctx.membership.role);
 
   // Compute tier distribution
   const tierCounts: Record<number, number> = {};
@@ -120,6 +131,88 @@ export default async function SupplyPage({
     const t = r.tier ?? 0;
     tierCounts[t] = (tierCounts[t] || 0) + 1;
   });
+
+  // Build network graph data from supply relationships
+  const nodeMap = new Map<
+    string,
+    { id: string; name: string; fromCount: number; toCount: number }
+  >();
+
+  rels.forEach((rel) => {
+    const fromWsOrg = rel.from_ws_org as unknown as {
+      id: string;
+      organizations: { id: string; display_name: string } | null;
+    } | null;
+    const toWsOrg = rel.to_ws_org as unknown as {
+      id: string;
+      organizations: { id: string; display_name: string } | null;
+    } | null;
+
+    const fromOrgId = fromWsOrg?.organizations?.id;
+    const fromOrgName = fromWsOrg?.organizations?.display_name;
+    const toOrgId = toWsOrg?.organizations?.id;
+    const toOrgName = toWsOrg?.organizations?.display_name;
+
+    if (fromOrgId && fromOrgName) {
+      const existing = nodeMap.get(fromOrgId);
+      if (existing) {
+        existing.fromCount += 1;
+      } else {
+        nodeMap.set(fromOrgId, {
+          id: fromOrgId,
+          name: fromOrgName,
+          fromCount: 1,
+          toCount: 0,
+        });
+      }
+    }
+
+    if (toOrgId && toOrgName) {
+      const existing = nodeMap.get(toOrgId);
+      if (existing) {
+        existing.toCount += 1;
+      } else {
+        nodeMap.set(toOrgId, {
+          id: toOrgId,
+          name: toOrgName,
+          fromCount: 0,
+          toCount: 1,
+        });
+      }
+    }
+  });
+
+  const graphNodes = Array.from(nodeMap.values()).map((n) => ({
+    id: n.id,
+    name: n.name,
+    type:
+      n.fromCount > 0 && n.toCount > 0
+        ? ("both" as const)
+        : n.fromCount > 0
+          ? ("from" as const)
+          : ("to" as const),
+  }));
+
+  const graphEdges = rels
+    .map((rel) => {
+      const fromWsOrg = rel.from_ws_org as unknown as {
+        organizations: { id: string } | null;
+      } | null;
+      const toWsOrg = rel.to_ws_org as unknown as {
+        organizations: { id: string } | null;
+      } | null;
+      const fromId = fromWsOrg?.organizations?.id;
+      const toId = toWsOrg?.organizations?.id;
+      if (!fromId || !toId) return null;
+      return {
+        from: fromId,
+        to: toId,
+        label:
+          RELATIONSHIP_TYPE_LABELS[rel.relationship_type] ??
+          rel.relationship_type,
+      };
+    })
+    .filter(Boolean) as { from: string; to: string; label?: string }[];
 
   return (
     <div className="space-y-6">
@@ -188,58 +281,19 @@ export default async function SupplyPage({
         </Card>
       </div>
 
-      {/* Network Graph Placeholder */}
+      {/* Network Graph */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">サプライネットワーク</CardTitle>
+          <CardTitle className="text-base">ネットワークグラフ</CardTitle>
+          <CardDescription>組織間の取引関係を可視化</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative flex h-48 items-center justify-center overflow-hidden rounded-lg border border-dashed bg-muted/20">
-            {rels.length > 0 ? (
-              <div className="flex flex-wrap items-center justify-center gap-4 p-6">
-                {rels.slice(0, 8).map((rel) => {
-                  const buyer = rel.buyer as unknown as {
-                    display_name: string;
-                  } | null;
-                  const supplier = rel.supplier as unknown as {
-                    display_name: string;
-                  } | null;
-                  return (
-                    <div
-                      key={rel.id}
-                      className="flex items-center gap-2 rounded-lg border bg-background px-3 py-1.5 text-xs shadow-sm"
-                    >
-                      <span className="font-medium">
-                        {buyer?.display_name ?? "?"}
-                      </span>
-                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium">
-                        {supplier?.display_name ?? "?"}
-                      </span>
-                      <TierBadge tier={rel.tier} />
-                    </div>
-                  );
-                })}
-                {rels.length > 8 && (
-                  <span className="text-xs text-muted-foreground">
-                    他{rels.length - 8}件
-                  </span>
-                )}
-              </div>
-            ) : (
-              <div className="text-center">
-                <Network className="mx-auto h-8 w-8 text-muted-foreground/40" />
-                <p className="mt-2 text-sm text-muted-foreground">
-                  サプライ関係を追加するとネットワークグラフが表示されます
-                </p>
-              </div>
-            )}
-          </div>
+          <NetworkGraph nodes={graphNodes} edges={graphEdges} />
         </CardContent>
       </Card>
 
       {/* Add Relationship Form */}
-      {orgs.length >= 2 && (
+      {hasEditAccess && orgs.length >= 2 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -266,35 +320,39 @@ export default async function SupplyPage({
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>バイヤー</TableHead>
+                  <TableHead>From 組織</TableHead>
                   <TableHead />
-                  <TableHead>サプライヤー</TableHead>
+                  <TableHead>To 組織</TableHead>
+                  <TableHead>関係タイプ</TableHead>
                   <TableHead>ティア</TableHead>
                   <TableHead>検証状態</TableHead>
-                  <TableHead>ステータス</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rels.map((rel) => {
-                  const buyer = rel.buyer as unknown as {
-                    id: string;
-                    display_name: string;
-                    country_code: string | null;
-                  } | null;
-                  const supplier = rel.supplier as unknown as {
-                    id: string;
-                    display_name: string;
-                    country_code: string | null;
-                  } | null;
+                  const fromOrg = (rel.from_ws_org as unknown as {
+                    organizations: {
+                      id: string;
+                      display_name: string;
+                      country_code: string | null;
+                    } | null;
+                  } | null)?.organizations;
+                  const toOrg = (rel.to_ws_org as unknown as {
+                    organizations: {
+                      id: string;
+                      display_name: string;
+                      country_code: string | null;
+                    } | null;
+                  } | null)?.organizations;
                   return (
                     <TableRow key={rel.id}>
                       <TableCell>
                         <span className="font-medium">
-                          {buyer?.display_name ?? "Unknown"}
+                          {fromOrg?.display_name ?? "Unknown"}
                         </span>
-                        {buyer?.country_code && (
+                        {fromOrg?.country_code && (
                           <span className="ml-1 text-xs text-muted-foreground">
-                            ({buyer.country_code})
+                            ({fromOrg.country_code})
                           </span>
                         )}
                       </TableCell>
@@ -303,13 +361,18 @@ export default async function SupplyPage({
                       </TableCell>
                       <TableCell>
                         <span className="font-medium">
-                          {supplier?.display_name ?? "Unknown"}
+                          {toOrg?.display_name ?? "Unknown"}
                         </span>
-                        {supplier?.country_code && (
+                        {toOrg?.country_code && (
                           <span className="ml-1 text-xs text-muted-foreground">
-                            ({supplier.country_code})
+                            ({toOrg.country_code})
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {RELATIONSHIP_TYPE_LABELS[rel.relationship_type] ?? rel.relationship_type}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <TierBadge tier={rel.tier} />
@@ -323,15 +386,6 @@ export default async function SupplyPage({
                               | "verified"
                           }
                         />
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            rel.status === "active" ? "default" : "secondary"
-                          }
-                        >
-                          {SUPPLY_STATUS_LABELS[rel.status] ?? rel.status}
-                        </Badge>
                       </TableCell>
                     </TableRow>
                   );

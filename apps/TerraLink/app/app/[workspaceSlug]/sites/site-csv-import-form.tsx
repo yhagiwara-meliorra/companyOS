@@ -9,7 +9,7 @@ import { Upload, Download, CheckCircle2 } from "lucide-react";
 type Org = { id: string; display_name: string };
 
 const SITE_CSV_TEMPLATE =
-  "name,site_type,country_code,region_admin1,lat,lng,area_ha,address\n東京工場,factory,JPN,東京都,35.6762,139.6503,5.2,東京都千代田区1-1\n";
+  "site_name,site_type,country_code,region,latitude,longitude,area_ha,address_text\n東京工場,factory,JPN,東京都,35.6762,139.6503,5.2,東京都千代田区1-1\n";
 
 function downloadTemplate() {
   const bom = "\uFEFF";

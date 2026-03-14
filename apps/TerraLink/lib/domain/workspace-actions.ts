@@ -1,9 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/auth/supabase-server";
 import { createAdminClient } from "@/lib/db/admin";
+import { appendChangeLog } from "@/lib/domain/change-log";
 import { z } from "zod/v4";
+import { ADMIN_ROLES } from "@/lib/auth/roles";
 
 // ── Validation ──────────────────────────────────────────────
 const CreateWorkspaceSchema = z.object({
@@ -118,6 +121,10 @@ export async function createWorkspace(
     return { error: "メンバー登録に失敗しました。管理者にお問い合わせください。" };
   }
 
+  await appendChangeLog(workspace.id, user.id, "workspaces", workspace.id, "insert", null, {
+    name, slug: workspace.slug,
+  });
+
   redirect(`/app/${workspace.slug}`);
 }
 
@@ -175,7 +182,7 @@ export async function inviteWorkspaceMember(
 
   if (
     !callerMembership ||
-    !["owner", "admin"].includes(callerMembership.role)
+    !(ADMIN_ROLES as readonly string[]).includes(callerMembership.role)
   ) {
     return { error: "メンバーを招待する権限がありません" };
   }
@@ -228,6 +235,20 @@ export async function inviteWorkspaceMember(
     });
 
     if (error) return { error: error.message };
+  }
+
+  await appendChangeLog(workspaceId, user.id, "workspace_members", workspaceId, "insert", null, {
+    email, role,
+  });
+
+  // Revalidate settings page so the member list reflects the new invite
+  const { data: ws } = await admin
+    .from("workspaces")
+    .select("slug")
+    .eq("id", workspaceId)
+    .single();
+  if (ws) {
+    revalidatePath(`/app/${ws.slug}/settings`);
   }
 
   return { success: true };

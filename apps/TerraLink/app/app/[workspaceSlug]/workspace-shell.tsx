@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Globe,
   Database,
+  TreePine,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { label: "サプライチェーン", href: "/supply", icon: Network },
   { label: "データソース", href: "/sources", icon: Database },
   { label: "LEAP", href: "/leap", icon: Leaf },
+  { label: "EUDR", href: "/eudr", icon: TreePine },
   { label: "証憑", href: "/evidence", icon: FileCheck },
   { label: "モニタリング", href: "/monitor", icon: Activity },
 ];

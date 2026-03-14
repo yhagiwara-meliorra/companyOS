@@ -49,6 +49,8 @@ import {
   Trash2,
   Power,
   PowerOff,
+  Globe,
+  TreePine,
 } from "lucide-react";
 import type { MonitoringRuleRow, MonitoringEventRow } from "./page";
 
@@ -104,6 +106,8 @@ const RULE_TYPE_LABEL: Record<string, string> = {
   threshold: "閾値アラート",
   missing_evidence: "証憑欠損",
   review_due: "レビュー期限",
+  benchmark_change: "国ベンチマーク変更",
+  eudr_risk_review: "EUDR リスクレビュー",
 };
 
 const RULE_TYPE_ICON: Record<string, React.ReactNode> = {
@@ -111,6 +115,8 @@ const RULE_TYPE_ICON: Record<string, React.ReactNode> = {
   threshold: <Shield className="h-3.5 w-3.5" />,
   missing_evidence: <AlertTriangle className="h-3.5 w-3.5" />,
   review_due: <Activity className="h-3.5 w-3.5" />,
+  benchmark_change: <Globe className="h-3.5 w-3.5" />,
+  eudr_risk_review: <TreePine className="h-3.5 w-3.5" />,
 };
 
 function formatRelativeTime(dateStr: string): string {
@@ -134,6 +140,7 @@ type Props = {
   events: MonitoringEventRow[];
   orgOptions: { id: string; name: string }[];
   siteOptions: { id: string; name: string }[];
+  canEdit?: boolean;
 };
 
 export function MonitorDashboard({
@@ -142,6 +149,7 @@ export function MonitorDashboard({
   events,
   orgOptions,
   siteOptions,
+  canEdit = false,
 }: Props) {
   const [isPending, startTransition] = useTransition();
   const [ruleOpen, setRuleOpen] = useState(false);
@@ -276,7 +284,7 @@ export function MonitorDashboard({
                         </span>
                       </div>
                     </div>
-                    {event.status === "open" && (
+                    {canEdit && event.status === "open" && (
                       <div className="flex items-center gap-1 shrink-0">
                         <Button
                           size="sm"
@@ -313,7 +321,7 @@ export function MonitorDashboard({
                         </Button>
                       </div>
                     )}
-                    {event.status === "acknowledged" && (
+                    {canEdit && event.status === "acknowledged" && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -347,147 +355,186 @@ export function MonitorDashboard({
                 定期的に実行される自動チェック
               </CardDescription>
             </div>
-            <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  ルール追加
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>モニタリングルールを作成</DialogTitle>
-                </DialogHeader>
-                <form action={handleCreateRule} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>ルール種別</Label>
-                    <select
-                      name="ruleType"
-                      required
-                      className={selectCn}
-                      value={selectedRuleType}
-                      onChange={(e) => setSelectedRuleType(e.target.value)}
-                    >
-                      <option value="source_refresh">ソース更新</option>
-                      <option value="threshold">閾値アラート</option>
-                      <option value="missing_evidence">
-                        証憑欠損
-                      </option>
-                      <option value="review_due">レビュー期限</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>対象タイプ</Label>
-                    <select
-                      name="targetType"
-                      defaultValue="site"
-                      className={selectCn}
-                    >
-                      <option value="site">サイト</option>
-                      <option value="organization">組織</option>
-                      <option value="material">素材</option>
-                      <option value="relationship">サプライ関係</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>対象</Label>
-                    <select name="targetId" required className={selectCn}>
-                      <option value="">対象を選択...</option>
-                      <optgroup label="サイト">
-                        {siteOptions.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="組織">
-                        {orgOptions.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  </div>
-
-                  {/* Dynamic config fields */}
-                  {selectedRuleType === "source_refresh" && (
-                    <div className="space-y-2">
-                      <Label>
-                        最大経過日数{" "}
-                        <span className="text-muted-foreground">
-                          — ソースが更新されない場合にトリガー
-                        </span>
-                      </Label>
-                      <Input
-                        name="maxAgeDays"
-                        type="number"
-                        defaultValue={30}
-                        min={1}
-                        max={365}
-                      />
-                    </div>
-                  )}
-                  {selectedRuleType === "threshold" && (
-                    <div className="space-y-2">
-                      <Label>
-                        リスクスコア閾値{" "}
-                        <span className="text-muted-foreground">(0-100)</span>
-                      </Label>
-                      <Input
-                        name="threshold"
-                        type="number"
-                        defaultValue={50}
-                        min={0}
-                        max={100}
-                      />
-                    </div>
-                  )}
-                  {selectedRuleType === "missing_evidence" && (
-                    <div className="space-y-2">
-                      <Label>
-                        陳腐化日数{" "}
-                        <span className="text-muted-foreground">
-                          — 証憑の更新がない場合にトリガー
-                        </span>
-                      </Label>
-                      <Input
-                        name="staleDays"
-                        type="number"
-                        defaultValue={90}
-                        min={1}
-                        max={365}
-                      />
-                    </div>
-                  )}
-                  {selectedRuleType === "review_due" && (
-                    <div className="space-y-2">
-                      <Label>
-                        レビュー間隔（日）{" "}
-                        <span className="text-muted-foreground">
-                          — リスクの再スコアリングがない場合にトリガー
-                        </span>
-                      </Label>
-                      <Input
-                        name="reviewDays"
-                        type="number"
-                        defaultValue={60}
-                        min={1}
-                        max={365}
-                      />
-                    </div>
-                  )}
-
-                  {error && <p className="text-sm text-red-600">{error}</p>}
-                  <Button type="submit" disabled={isPending} className="w-full">
-                    {isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    ルールを作成
+            {canEdit && (
+              <Dialog open={ruleOpen} onOpenChange={setRuleOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    ルール追加
                   </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>モニタリングルールを作成</DialogTitle>
+                  </DialogHeader>
+                  <form action={handleCreateRule} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>ルール種別</Label>
+                      <select
+                        name="ruleType"
+                        required
+                        className={selectCn}
+                        value={selectedRuleType}
+                        onChange={(e) => setSelectedRuleType(e.target.value)}
+                      >
+                        <option value="source_refresh">ソース更新</option>
+                        <option value="threshold">閾値アラート</option>
+                        <option value="missing_evidence">
+                          証憑欠損
+                        </option>
+                        <option value="review_due">レビュー期限</option>
+                        <option value="benchmark_change">
+                          国ベンチマーク変更（EUDR）
+                        </option>
+                        <option value="eudr_risk_review">
+                          EUDR リスクレビュー
+                        </option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>対象タイプ</Label>
+                      <select
+                        name="targetType"
+                        defaultValue="site"
+                        className={selectCn}
+                      >
+                        <option value="site">サイト</option>
+                        <option value="organization">組織</option>
+                        <option value="material">素材</option>
+                        <option value="relationship">サプライ関係</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>対象</Label>
+                      <select name="targetId" required className={selectCn}>
+                        <option value="">対象を選択...</option>
+                        <optgroup label="サイト">
+                          {siteOptions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="組織">
+                          {orgOptions.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* Dynamic config fields */}
+                    {selectedRuleType === "source_refresh" && (
+                      <div className="space-y-2">
+                        <Label>
+                          最大経過日数{" "}
+                          <span className="text-muted-foreground">
+                            — ソースが更新されない場合にトリガー
+                          </span>
+                        </Label>
+                        <Input
+                          name="maxAgeDays"
+                          type="number"
+                          defaultValue={30}
+                          min={1}
+                          max={365}
+                        />
+                      </div>
+                    )}
+                    {selectedRuleType === "threshold" && (
+                      <div className="space-y-2">
+                        <Label>
+                          リスクスコア閾値{" "}
+                          <span className="text-muted-foreground">(0-100)</span>
+                        </Label>
+                        <Input
+                          name="threshold"
+                          type="number"
+                          defaultValue={50}
+                          min={0}
+                          max={100}
+                        />
+                      </div>
+                    )}
+                    {selectedRuleType === "missing_evidence" && (
+                      <div className="space-y-2">
+                        <Label>
+                          陳腐化日数{" "}
+                          <span className="text-muted-foreground">
+                            — 証憑の更新がない場合にトリガー
+                          </span>
+                        </Label>
+                        <Input
+                          name="staleDays"
+                          type="number"
+                          defaultValue={90}
+                          min={1}
+                          max={365}
+                        />
+                      </div>
+                    )}
+                    {selectedRuleType === "review_due" && (
+                      <div className="space-y-2">
+                        <Label>
+                          レビュー間隔（日）{" "}
+                          <span className="text-muted-foreground">
+                            — リスクの再スコアリングがない場合にトリガー
+                          </span>
+                        </Label>
+                        <Input
+                          name="reviewDays"
+                          type="number"
+                          defaultValue={60}
+                          min={1}
+                          max={365}
+                        />
+                      </div>
+                    )}
+                    {selectedRuleType === "benchmark_change" && (
+                      <div className="space-y-2">
+                        <Label>
+                          監視対象国コード（カンマ区切り、空欄＝全国）{" "}
+                          <span className="text-muted-foreground">
+                            — 国ベンチマーク変更時にトリガー
+                          </span>
+                        </Label>
+                        <Input
+                          name="countryCodes"
+                          placeholder="例: BR,ID,CM（空欄で全国監視）"
+                        />
+                      </div>
+                    )}
+                    {selectedRuleType === "eudr_risk_review" && (
+                      <div className="space-y-2">
+                        <Label>
+                          レビュー間隔（日）{" "}
+                          <span className="text-muted-foreground">
+                            — EUDR リスク評価が再評価されていない場合にトリガー
+                          </span>
+                        </Label>
+                        <Input
+                          name="reviewDays"
+                          type="number"
+                          defaultValue={30}
+                          min={1}
+                          max={365}
+                        />
+                      </div>
+                    )}
+
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <Button type="submit" disabled={isPending} className="w-full">
+                      {isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      ルールを作成
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -504,7 +551,7 @@ export function MonitorDashboard({
                   <TableHead>設定</TableHead>
                   <TableHead>ステータス</TableHead>
                   <TableHead>最終実行</TableHead>
-                  <TableHead>操作</TableHead>
+                  {canEdit && <TableHead>操作</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -556,37 +603,39 @@ export function MonitorDashboard({
                           ? formatRelativeTime(rule.last_run_at)
                           : "未実行"}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            disabled={isPending}
-                            onClick={() =>
-                              handleToggleRule(rule.id, !rule.is_active)
-                            }
-                            title={
-                              rule.is_active ? "無効化" : "有効化"
-                            }
-                          >
-                            {rule.is_active ? (
-                              <PowerOff className="h-3.5 w-3.5" />
-                            ) : (
-                              <Power className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
-                            disabled={isPending}
-                            onClick={() => handleDeleteRule(rule.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {canEdit && (
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              disabled={isPending}
+                              onClick={() =>
+                                handleToggleRule(rule.id, !rule.is_active)
+                              }
+                              title={
+                                rule.is_active ? "無効化" : "有効化"
+                              }
+                            >
+                              {rule.is_active ? (
+                                <PowerOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Power className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-red-600 hover:text-red-700"
+                              disabled={isPending}
+                              onClick={() => handleDeleteRule(rule.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -600,16 +649,24 @@ export function MonitorDashboard({
 }
 
 function configSummary(rule: MonitoringRuleRow): string {
-  const config = rule.config as Record<string, number>;
+  const config = rule.config as Record<string, unknown>;
   switch (rule.rule_type) {
     case "source_refresh":
-      return `最大経過: ${config.max_age_days ?? 30}日`;
+      return `最大経過: ${(config.max_age_days as number) ?? 30}日`;
     case "threshold":
-      return `スコア ≥ ${config.threshold ?? 50}`;
+      return `スコア ≥ ${(config.threshold as number) ?? 50}`;
     case "missing_evidence":
-      return `陳腐化: ${config.stale_days ?? 90}日`;
+      return `陳腐化: ${(config.stale_days as number) ?? 90}日`;
     case "review_due":
-      return `レビュー間隔: ${config.review_days ?? 60}日`;
+      return `レビュー間隔: ${(config.review_days as number) ?? 60}日`;
+    case "benchmark_change": {
+      const codes = config.country_codes as string[] | undefined;
+      return codes && codes.length > 0
+        ? `対象国: ${codes.join(", ")}`
+        : "全国監視";
+    }
+    case "eudr_risk_review":
+      return `レビュー間隔: ${(config.review_days as number) ?? 30}日`;
     default:
       return "";
   }

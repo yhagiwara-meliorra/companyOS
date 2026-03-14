@@ -54,6 +54,7 @@ const CATEGORY_COLOR: Record<string, string> = {
 };
 
 type Props = {
+  canEdit?: boolean;
   workspaceSlug: string;
   assessmentId: string;
   scopes: ScopeRow[];
@@ -65,6 +66,7 @@ type Props = {
 };
 
 export function LocateTab({
+  canEdit = false,
   workspaceSlug,
   assessmentId,
   scopes,
@@ -139,62 +141,64 @@ export function LocateTab({
                 このアセスメントに含まれるサイトと組織
               </CardDescription>
             </div>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  スコープを追加
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>アセスメント対象を追加</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">対象種別</label>
-                    <select
-                      className={selectCn}
-                      value={scopeType}
-                      onChange={(e) => setScopeType(e.target.value)}
-                    >
-                      <option value="site">サイト</option>
-                      <option value="organization">組織</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      {scopeType === "site" ? "サイト" : "組織"}
-                    </label>
-                    <select
-                      className={selectCn}
-                      value={targetId}
-                      onChange={(e) => setTargetId(e.target.value)}
-                    >
-                      <option value="">選択...</option>
-                      {targetOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {error && (
-                    <p className="text-sm text-red-600">{error}</p>
-                  )}
-                  <Button
-                    onClick={handleAddScope}
-                    disabled={isPending || !targetId}
-                    className="w-full"
-                  >
-                    {isPending ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    アセスメントに追加
+            {canEdit && (
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    スコープを追加
                   </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>アセスメント対象を追加</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">対象種別</label>
+                      <select
+                        className={selectCn}
+                        value={scopeType}
+                        onChange={(e) => setScopeType(e.target.value)}
+                      >
+                        <option value="site">サイト</option>
+                        <option value="organization">組織</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">
+                        {scopeType === "site" ? "サイト" : "組織"}
+                      </label>
+                      <select
+                        className={selectCn}
+                        value={targetId}
+                        onChange={(e) => setTargetId(e.target.value)}
+                      >
+                        <option value="">選択...</option>
+                        {targetOptions.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {error && (
+                      <p className="text-sm text-red-600">{error}</p>
+                    )}
+                    <Button
+                      onClick={handleAddScope}
+                      disabled={isPending || !targetId}
+                      className="w-full"
+                    >
+                      {isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      アセスメントに追加
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -250,7 +254,9 @@ export function LocateTab({
                   <TableHead>データソース</TableHead>
                   <TableHead>カテゴリ</TableHead>
                   <TableHead className="text-right">距離 (km)</TableHead>
-                  <TableHead className="text-right">重複率</TableHead>
+                  <TableHead className="text-right">交差タイプ</TableHead>
+                  <TableHead className="text-right">重複面積 (m²)</TableHead>
+                  <TableHead className="text-right">重要度</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -279,8 +285,16 @@ export function LocateTab({
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right text-xs">
-                      {int.overlap_pct != null
-                        ? `${(int.overlap_pct * 100).toFixed(0)}%`
+                      {int.intersection_type ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs">
+                      {int.area_overlap_m2 != null
+                        ? int.area_overlap_m2.toLocaleString("ja-JP")
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs">
+                      {int.severity_hint != null
+                        ? int.severity_hint.toFixed(2)
                         : "—"}
                     </TableCell>
                   </TableRow>

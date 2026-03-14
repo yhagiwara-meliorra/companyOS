@@ -1,0 +1,9 @@
+country_of_production,latitude,longitude,area_ha,region,production_start_date,production_end_date,plot_reference
+GH,6.2301,-2.3456,2.5,Western Region,2025-10-01,2026-03-31,GH-COC-001
+GH,6.2450,-2.3290,3.1,Western Region,2025-10-01,2026-03-31,GH-COC-002
+GH,6.2180,-2.3610,1.8,Western Region,2025-10-01,2026-03-31,GH-COC-003
+GH,6.8720,-6.4480,2.2,Sassandra-Marahoue,2025-09-01,2026-04-30,GH-COC-004
+GH,6.8650,-6.4350,3.5,Sassandra-Marahoue,2025-09-01,2026-04-30,GH-COC-005
+GH,5.9012,-1.7845,1.2,Central Region,2025-11-01,2026-04-30,GH-COC-006
+GH,5.9180,-1.7690,2.8,Central Region,2025-11-01,2026-04-30,GH-COC-007
+GH,5.8890,-1.8010,1.6,Central Region,2025-10-15,2026-03-15,GH-COC-008

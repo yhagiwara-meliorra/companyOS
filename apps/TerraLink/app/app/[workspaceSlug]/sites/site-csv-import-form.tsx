@@ -71,7 +71,7 @@ export function SiteCsvImportForm({
             ref={fileRef}
             type="file"
             name="file"
-            accept=".csv"
+            accept=".csv,.tsv,.txt,text/csv,text/plain,text/tab-separated-values,application/csv,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => {
               if (e.target.files?.length) {

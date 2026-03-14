@@ -34,28 +34,38 @@ function FitBounds({ sites }: { sites: Site[] }) {
   return null;
 }
 
+/** World bounds — prevent panning beyond one globe width */
+const WORLD_BOUNDS = L.latLngBounds(
+  [-85, -180], // SW corner
+  [85, 180]    // NE corner
+);
+
 export function SiteMapInner({
   sites,
   center,
-  zoom = 3,
-  className = "h-[300px] w-full rounded-lg",
+  zoom = 2,
+  className = "h-[420px] w-full rounded-lg",
 }: {
   sites: Site[];
   center?: [number, number];
   zoom?: number;
   className?: string;
 }) {
-  const defaultCenter: [number, number] = center ?? [35.68, 139.69]; // Tokyo
+  const defaultCenter: [number, number] = center ?? [20, 0]; // World-centered
   return (
     <MapContainer
       center={defaultCenter}
       zoom={zoom}
       className={className}
       scrollWheelZoom={false}
+      minZoom={2}
+      maxBounds={WORLD_BOUNDS}
+      maxBoundsViscosity={1.0}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        noWrap
       />
       {sites.map((site) => (
         <Marker key={site.id} position={[site.lat, site.lng]}>

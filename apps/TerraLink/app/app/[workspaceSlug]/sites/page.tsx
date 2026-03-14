@@ -131,10 +131,10 @@ export default async function SitesListPage({
                   lat: s.latitude,
                   lng: s.longitude,
                 }))}
-                className="h-48 w-full rounded-lg"
+                className="h-[420px] w-full rounded-lg"
               />
             ) : (
-              <div className="flex h-48 items-center justify-center rounded-xl border bg-muted">
+              <div className="flex h-[420px] items-center justify-center rounded-xl border bg-muted">
                 <div className="text-center">
                   <MapPin className="mx-auto h-8 w-8 text-muted-foreground/40" />
                   <p className="mt-2 text-sm text-muted-foreground">

@@ -14,6 +14,7 @@ import {
 } from "@/lib/labels";
 import { DdsActions } from "./dds-actions";
 import { AddPlotForm } from "./add-plot-form";
+import { ProductLineCsvImportForm } from "./product-line-csv-import-form";
 import {
   FileText,
   MapPin,
@@ -265,10 +266,18 @@ export default async function DdsDetailPage({
 
       {/* Product Lines */}
       <section>
-        <h2 className="mb-3 text-lg font-semibold">
-          <Package className="mr-2 inline-block h-5 w-5" />
-          製品明細
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
+            <Package className="mr-2 inline-block h-5 w-5" />
+            製品明細
+          </h2>
+          {editable && (
+            <ProductLineCsvImportForm
+              workspaceSlug={workspaceSlug}
+              ddsId={ddsId}
+            />
+          )}
+        </div>
         {(productLines ?? []).length === 0 ? (
           <div className="rounded-lg border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
             製品明細がまだ登録されていません

@@ -449,6 +449,250 @@ export async function createProductLine(
   return { success: true };
 }
 
+// ── DDS CSV Import ──────────────────────────────────────────
+
+const VALID_OPERATOR_TYPES = new Set(["operator", "non_sme_trader", "sme_trader"]);
+
+export async function importDdsCsv(
+  workspaceSlug: string,
+  _prev: ImportState,
+  formData: FormData
+): Promise<ImportState> {
+  try {
+    const user = await requireAuth();
+    if (!user) return { error: "認証が必要です" };
+
+    const file = formData.get("file") as File | null;
+    if (!file) return { error: "ファイルが選択されていません" };
+
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
+    if (rows.length === 0) return { error: "CSVにデータ行がありません" };
+
+    const missing = validateHeaders(headers, [
+      "internal_reference",
+      "operator_org_name",
+      "operator_type",
+    ]);
+    if (missing.length > 0)
+      return { error: `必須カラムが不足: ${missing.join(", ")}` };
+
+    const admin = createAdminClient();
+    const ws = await resolveWorkspace(admin, workspaceSlug);
+    if (!ws) return { error: "ワークスペースが見つかりません" };
+
+    // Load orgs for name→id lookup
+    const { data: orgLinks } = await admin
+      .from("workspace_organizations")
+      .select("organizations(id, display_name, legal_name)")
+      .eq("workspace_id", ws.id)
+      .eq("status", "active");
+
+    const orgMap = new Map<string, string>();
+    for (const l of orgLinks ?? []) {
+      const org = l.organizations as unknown as {
+        id: string;
+        display_name: string;
+        legal_name: string;
+      };
+      if (!org) continue;
+      orgMap.set(org.display_name.toLowerCase(), org.id);
+      orgMap.set(org.legal_name.toLowerCase(), org.id);
+    }
+
+    let imported = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+
+      const operatorType = (row.operator_type || "operator").trim().toLowerCase();
+      if (!VALID_OPERATOR_TYPES.has(operatorType)) {
+        errors.push(`行${rowNum}: operator_type="${row.operator_type}"は無効`);
+        failed++;
+        continue;
+      }
+
+      const orgName = (row.operator_org_name || "").trim().toLowerCase();
+      const orgId = orgMap.get(orgName);
+      if (!orgId) {
+        errors.push(`行${rowNum}: 組織"${row.operator_org_name}"が見つかりません`);
+        failed++;
+        continue;
+      }
+
+      const { error: insErr } = await admin
+        .from("eudr_dds_statements")
+        .insert({
+          workspace_id: ws.id,
+          operator_org_id: orgId,
+          internal_reference: row.internal_reference || `DDS-${Date.now()}`,
+          operator_type: operatorType,
+          status: "draft",
+          country_of_activity: row.country_of_activity?.trim() || null,
+          description: row.description?.trim() || null,
+          notes: row.notes?.trim() || null,
+          created_by: user.id,
+        });
+
+      if (insErr) {
+        errors.push(`行${rowNum}: ${insErr.message}`);
+        failed++;
+      } else {
+        imported++;
+      }
+    }
+
+    if (imported > 0) {
+      await appendChangeLog(ws.id, user.id, "eudr_dds_statements", ws.id, "insert", null, {
+        action: "csv_import",
+        imported,
+        failed,
+        total: rows.length,
+      });
+    }
+
+    revalidatePath(`/app/${workspaceSlug}/eudr`);
+
+    if (errors.length > 0) {
+      return {
+        error: `${imported}/${rows.length}件インポート。エラー: ${errors.slice(0, 3).join("; ")}`,
+        imported,
+        failed,
+        total: rows.length,
+      };
+    }
+    return { success: true, imported, total: rows.length };
+  } catch (e) {
+    console.error("[DDS CSV Import] Unexpected error:", e);
+    return { error: `サーバーエラー: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+// ── Product Line CSV Import ─────────────────────────────────
+
+const VALID_COMMODITY_TYPES = new Set([
+  "cattle", "cocoa", "coffee", "oil_palm", "rubber", "soya", "wood",
+]);
+
+export async function importProductLinesCsv(
+  workspaceSlug: string,
+  ddsId: string,
+  _prev: ImportState,
+  formData: FormData
+): Promise<ImportState> {
+  try {
+    const user = await requireAuth();
+    if (!user) return { error: "認証が必要です" };
+
+    const file = formData.get("file") as File | null;
+    if (!file) return { error: "ファイルが選択されていません" };
+
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
+    if (rows.length === 0) return { error: "CSVにデータ行がありません" };
+
+    const missing = validateHeaders(headers, [
+      "commodity_type",
+      "cn_code",
+      "product_description",
+      "country_of_production",
+    ]);
+    if (missing.length > 0)
+      return { error: `必須カラムが不足: ${missing.join(", ")}` };
+
+    // Pre-validate
+    const invalid: string[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const ct = (rows[i].commodity_type || "").trim().toLowerCase();
+      if (!VALID_COMMODITY_TYPES.has(ct)) {
+        invalid.push(`行${i + 2}: commodity_type="${rows[i].commodity_type}"は無効（有効値: ${[...VALID_COMMODITY_TYPES].join(", ")}）`);
+      }
+    }
+    if (invalid.length > 0) return { error: invalid.slice(0, 5).join("\n") };
+
+    const admin = createAdminClient();
+    const ws = await resolveWorkspace(admin, workspaceSlug);
+    if (!ws) return { error: "ワークスペースが見つかりません" };
+
+    // Pre-fetch commodity codes for cn_code matching
+    const { data: allCodes } = await admin
+      .from("eudr_commodity_codes")
+      .select("id, cn_code")
+      .eq("is_active", true)
+      .order("cn_year", { ascending: false });
+
+    const codeMap = new Map<string, string>();
+    for (const c of allCodes ?? []) {
+      if (!codeMap.has(c.cn_code)) codeMap.set(c.cn_code, c.id);
+    }
+
+    let imported = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    const payloads = rows.map((row) => ({
+      dds_id: ddsId,
+      commodity_code_id: codeMap.get(row.cn_code?.trim()) ?? null,
+      commodity_type: row.commodity_type?.trim().toLowerCase(),
+      cn_code: row.cn_code?.trim() || "",
+      product_description: row.product_description?.trim() || "",
+      country_of_production: row.country_of_production?.trim() || "",
+      quantity_kg: row.quantity_kg ? parseFloat(row.quantity_kg) : null,
+      hs_code: row.hs_code?.trim() || null,
+      trade_name: row.trade_name?.trim() || null,
+      scientific_name: row.scientific_name?.trim() || null,
+    }));
+
+    const { data: inserted, error: batchErr } = await admin
+      .from("eudr_dds_product_lines")
+      .insert(payloads)
+      .select("id");
+
+    if (batchErr || !inserted) {
+      // Fallback: row by row
+      for (let i = 0; i < payloads.length; i++) {
+        const { error: rowErr } = await admin
+          .from("eudr_dds_product_lines")
+          .insert(payloads[i]);
+        if (rowErr) {
+          errors.push(`行${i + 2}: ${rowErr.message}`);
+          failed++;
+        } else {
+          imported++;
+        }
+      }
+    } else {
+      imported = inserted.length;
+    }
+
+    if (imported > 0) {
+      await appendChangeLog(ws.id, user.id, "eudr_dds_product_lines", ddsId, "insert", null, {
+        action: "csv_import",
+        imported,
+        total: rows.length,
+      });
+    }
+
+    revalidatePath(`/app/${workspaceSlug}/eudr`);
+
+    if (errors.length > 0) {
+      return {
+        error: `${imported}/${rows.length}件インポート。エラー: ${errors.slice(0, 3).join("; ")}`,
+        imported,
+        failed,
+        total: rows.length,
+      };
+    }
+    return { success: true, imported, total: rows.length };
+  } catch (e) {
+    console.error("[ProductLine CSV Import] Unexpected error:", e);
+    return { error: `サーバーエラー: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 // ── Plot CRUD ───────────────────────────────────────────────
 
 export async function createPlot(

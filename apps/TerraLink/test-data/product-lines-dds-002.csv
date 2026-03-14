@@ -1,0 +1,3 @@
+commodity_type,cn_code,product_description,country_of_production,quantity_kg,hs_code,trade_name,scientific_name
+soya,1201,Soybeans whether or not broken,BR,150000,1201.90,,Glycine max
+oil_palm,1511,Palm oil crude,ID,80000,1511.10,,Elaeis guineensis

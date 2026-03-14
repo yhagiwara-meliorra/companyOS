@@ -7,7 +7,7 @@ export const SiteMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[300px] w-full animate-pulse rounded-lg bg-muted" />
+      <div className="h-[420px] w-full animate-pulse rounded-lg bg-muted" />
     ),
   }
 );

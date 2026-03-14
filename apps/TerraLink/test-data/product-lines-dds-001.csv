@@ -1,0 +1,5 @@
+commodity_type,cn_code,product_description,country_of_production,quantity_kg,hs_code,trade_name,scientific_name
+coffee,0901,Green coffee beans - Arabica,RW,12000,0901.11,Arabica,Coffea arabica
+cocoa,1801,Cocoa beans whole or broken,GH,8000,1801.00,Forastero,Theobroma cacao
+cocoa,1801,Cocoa beans whole or broken,CI,6500,1801.00,Forastero,Theobroma cacao
+cattle,0201,Fresh or chilled bovine meat,CO,3000,0201.30,,Bos taurus

@@ -10,6 +10,7 @@ import {
   label,
 } from "@/lib/labels";
 import { Plus } from "lucide-react";
+import { DdsCsvImportForm } from "./dds-csv-import-form";
 
 export default async function DdsListPage({
   params,
@@ -49,13 +50,16 @@ export default async function DdsListPage({
           </p>
         </div>
         {editable && (
-          <Link
-            href={`${base}/dds/new`}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" />
-            新規 DDS
-          </Link>
+          <div className="flex items-center gap-2">
+            <DdsCsvImportForm workspaceSlug={workspaceSlug} />
+            <Link
+              href={`${base}/dds/new`}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" />
+              新規 DDS
+            </Link>
+          </div>
         )}
       </div>
 

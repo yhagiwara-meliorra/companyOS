@@ -10,3 +10,11 @@ export {
   buildDigestUserMessage,
   type WeeklySignalInput,
 } from "./generate-digest";
+
+export {
+  IMPROVE_VERSION,
+  IMPROVE_SYSTEM_PROMPT,
+  buildImproveUserMessage,
+  ImproveResultSchema,
+  type ImproveResult,
+} from "./improve-message";

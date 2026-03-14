@@ -23,6 +23,7 @@ export async function GET() {
       "chat:write",
       "users:read",
       "users:read.email",
+      "commands",
     ],
     redirectUri: `${appUrl}/api/slack/oauth/callback`,
   });

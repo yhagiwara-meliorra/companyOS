@@ -65,6 +65,59 @@ export type Database = {
           },
         ]
       }
+      improvement_requests: {
+        Row: {
+          alternatives: Json
+          content_hash: string
+          created_at: string
+          id: string
+          improved_text: string | null
+          latency_ms: number | null
+          model_version_id: string
+          org_id: string
+          provider_team_id: string
+          provider_user_id: string
+          scene_label: string | null
+          tone_reason: string | null
+        }
+        Insert: {
+          alternatives?: Json
+          content_hash: string
+          created_at?: string
+          id?: string
+          improved_text?: string | null
+          latency_ms?: number | null
+          model_version_id: string
+          org_id: string
+          provider_team_id: string
+          provider_user_id: string
+          scene_label?: string | null
+          tone_reason?: string | null
+        }
+        Update: {
+          alternatives?: Json
+          content_hash?: string
+          created_at?: string
+          id?: string
+          improved_text?: string | null
+          latency_ms?: number | null
+          model_version_id?: string
+          org_id?: string
+          provider_team_id?: string
+          provider_user_id?: string
+          scene_label?: string | null
+          tone_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "improvement_requests_model_version_id_fkey"
+            columns: ["model_version_id"]
+            isOneToOne: false
+            referencedRelation: "model_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_analyses: {
         Row: {
           created_at: string

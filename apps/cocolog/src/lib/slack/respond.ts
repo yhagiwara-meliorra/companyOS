@@ -1,8 +1,9 @@
 /**
- * Post an ephemeral response to a Slack slash command via response_url.
- * The response_url is valid for 30 minutes after the command is invoked.
+ * Post an ephemeral response via Slack response_url.
+ * Works for both slash commands and interactivity payloads (message shortcuts, etc.).
+ * The response_url is valid for 30 minutes after the interaction.
  */
-export async function respondToSlashCommand(
+export async function respondEphemeral(
   responseUrl: string,
   payload: {
     text: string;

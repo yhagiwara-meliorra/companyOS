@@ -476,7 +476,7 @@ Avoid building:
 ## 9. Current Now / Next / Later
 
 ## Now
-- Real-time communication improvement (Phase 1) — server-side complete, Slack App config pending
+- Real-time communication improvement (Phase 1) — slash command + message shortcut 実装完了, Slack App config pending
 - Slack App Home personal coach (Phase 2)
 
 ## Next
@@ -493,8 +493,8 @@ Avoid building:
 
 These should be resolved as implementation advances.
 
-- What is the safest and most useful Slack entrypoint for real-time improvement?
-- Should real-time improvement begin via App Home, message shortcut, slash command, or modal?
+- ~~What is the safest and most useful Slack entrypoint for real-time improvement?~~ → Resolved: slash command (`/improve`) + message shortcut (right-click → 改善)
+- ~~Should real-time improvement begin via App Home, message shortcut, slash command, or modal?~~ → Resolved: both slash command and message shortcut implemented
 - What is the minimum privacy threshold for team insights?
 - How should manager roles be mapped cleanly from existing org membership?
 - What usage event set is enough for pricing and upgrade experiments?

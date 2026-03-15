@@ -8,7 +8,7 @@ import {
 } from "@/lib/validations/slack-command";
 import { checkImproveRateLimit } from "@/lib/slack/rate-limit";
 import { improveMessage } from "@/lib/anthropic/improve";
-import { respondToSlashCommand } from "@/lib/slack/respond";
+import { respondEphemeral } from "@/lib/slack/respond";
 import { buildImproveResponseBlocks } from "@/lib/slack/improve-blocks";
 
 export const runtime = "nodejs";
@@ -120,10 +120,10 @@ async function handleImproveCommand(
       });
 
       const { text, blocks } = buildImproveResponseBlocks(result);
-      await respondToSlashCommand(command.response_url, { text, blocks });
+      await respondEphemeral(command.response_url, { text, blocks });
     } catch (err) {
       console.error("[/improve] processing failed:", err);
-      await respondToSlashCommand(command.response_url, {
+      await respondEphemeral(command.response_url, {
         text: "申し訳ございません。メッセージの改善処理中にエラーが発生しました。しばらくしてから再度お試しください。",
       }).catch((e) =>
         console.error("[/improve] error response failed:", e),

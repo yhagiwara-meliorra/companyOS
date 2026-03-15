@@ -1,52 +1,40 @@
-# Handoff: Phase 1 — Real-time Communication Improvement (v2: Message Shortcut)
+# Handoff: Phase 1 — Real-time Communication Improvement (Complete)
 
-**Date:** 2026-03-14
+**Date:** 2026-03-15
 **Phase:** 1 (Real-time Communication Improvement)
-**Status:** Server-side implementation complete (slash command + message shortcut), Slack App dashboard config pending
+**Status:** Implementation complete & deployed. Slash command E2E confirmed. Message shortcut pending Callback ID fix in Slack dashboard.
 
 ---
 
-## What was done
+## Feature worked on
 
-### Session 1: `/improve` slash command
-Implemented the `/improve` slash command that lets users submit draft text and receive improved phrasing, tone analysis, and alternatives in real-time.
+Phase 1: Real-time communication improvement for Slack — two entrypoints:
+1. **`/improve` slash command** — user types `/improve <draft>`, gets improved phrasing back as ephemeral message
+2. **Message shortcut** — user right-clicks any message → "メッセージを改善する" → gets improvement suggestions with original text quoted
 
-### Session 2: Message shortcut + refactoring
-Added a **message shortcut** (right-click → "メッセージを改善する") that lets users improve any existing message in Slack. Also refactored the response helper for reuse.
+Both share the same `improveMessage()` pipeline, rate limiting, and `ai.improvement_requests` analytics table.
 
 ---
 
-## Files created (Session 1: 9 files)
+## Files changed
+
+### New files (11 total)
 
 | File | Purpose |
 |------|---------|
 | `supabase/migrations/00006_improvement_requests.sql` | `ai.improvement_requests` table |
 | `src/lib/validations/slack-command.ts` | Zod schema for slash command payloads |
-| `src/lib/slack/respond.ts` | `respondEphemeral()` — POST via response_url |
-| `src/lib/slack/improve-blocks.ts` | Block Kit builder for improvement responses |
+| `src/lib/validations/slack-interaction.ts` | Zod schema for Slack interactivity payloads (message_action) |
+| `src/lib/slack/respond.ts` | `respondEphemeral()` — POST to Slack response_url |
+| `src/lib/slack/improve-blocks.ts` | Block Kit builders: `buildImproveResponseBlocks` + `buildImproveShortcutBlocks` |
 | `src/lib/slack/rate-limit.ts` | Per-user rate limit (free: 10/hr, pro: 50/hr) |
-| `src/lib/anthropic/prompts/improve-message.ts` | Claude prompt (improve-v1) + `ImproveResultSchema` |
+| `src/lib/anthropic/prompts/improve-message.ts` | Claude prompt (improve-v1) + ImproveResultSchema |
 | `src/lib/anthropic/improve.ts` | Core `improveMessage()` function |
 | `src/app/api/slack/commands/route.ts` | Slash command route handler |
-| `src/app/api/analytics/improvements/route.ts` | Dashboard usage stats API |
+| `src/app/api/slack/interactions/route.ts` | Interactivity route handler (message shortcuts) |
+| `src/app/api/analytics/improvements/route.ts` | Dashboard improvement usage stats API |
 
-## Files created (Session 2: 2 files)
-
-| File | Purpose |
-|------|---------|
-| `src/lib/validations/slack-interaction.ts` | Zod schema for Slack interactivity payloads (message_action) |
-| `src/app/api/slack/interactions/route.ts` | Interactivity handler — routes message shortcuts to improve pipeline |
-
-## Files modified (Session 2: 4 files)
-
-| File | Change |
-|------|--------|
-| `src/lib/slack/respond.ts` | Renamed `respondToSlashCommand` → `respondEphemeral` (works for both slash commands and interactions) |
-| `src/app/api/slack/commands/route.ts` | Updated import to use `respondEphemeral` |
-| `src/lib/slack/improve-blocks.ts` | Added `buildImproveShortcutBlocks(originalText, result)` — includes original message quoted |
-| `src/__tests__/improve.test.ts` | Added 11 new tests (message action schema, interaction payload, shortcut blocks) |
-
-## Files modified (Session 1: 4 files)
+### Modified files (5)
 
 | File | Change |
 |------|--------|
@@ -54,79 +42,53 @@ Added a **message shortcut** (right-click → "メッセージを改善する") 
 | `src/lib/anthropic/prompts/index.ts` | Added improve prompt exports |
 | `src/lib/anthropic/index.ts` | Added `improveMessage` export |
 | `src/types/database.ts` | Added `improvement_requests` table types |
+| `src/middleware.ts` | Broadened Slack route exclusion: `api/slack/events` → `api/slack` |
+
+### Test file
+
+| File | Tests |
+|------|-------|
+| `src/__tests__/improve.test.ts` | 25 tests (slash command schema, improve result schema, Block Kit builders, interaction schemas) |
 
 ---
 
-## Architecture decisions
+## Migrations / env changes
 
-1. **Two entrypoints, one pipeline:** Both `/improve` (slash command) and message shortcut route through the same `improveMessage()` core function, shared rate limiting, and shared `improvement_requests` table.
-2. **Message shortcut response includes original text** — `buildImproveShortcutBlocks()` quotes the original message for comparison, unlike the slash command variant.
-3. **Interaction handler is extensible** — `SlackInteractionPayloadSchema` uses `z.discriminatedUnion` so adding `block_actions`, `view_submission`, etc. later is trivial.
-4. **Empty 200 ACK for interactions** — unlike slash commands (which can include JSON in the 200 response), interaction payloads require an empty 200 body. All user-visible messages are sent via `response_url`.
-5. **`respondEphemeral` is shared** — renamed from `respondToSlashCommand` since the `response_url` POST mechanism is identical for both slash commands and interactions.
+- **Migration:** `supabase/migrations/00006_improvement_requests.sql` — creates `ai.improvement_requests` table with indexes for rate limiting and analytics
+- **Env:** No new env vars required (uses existing `SLACK_SIGNING_SECRET`, `ANTHROPIC_API_KEY`, Supabase service role)
+- **OAuth scope:** `commands` added to Slack OAuth scopes (existing installs must reinstall)
 
 ---
 
-## Privacy
+## Completed items
 
-- Raw message text from shortcuts is passed transiently to Claude API only.
-- Only `content_hash` (SHA-256) is stored in the database.
-- `improved_text`, `tone_reason`, and `alternatives` are model-generated outputs.
-- Ephemeral Slack messages are visible only to the invoking user.
-
----
-
-## Verification
-
-All checks passed on 2026-03-14:
-
-- `pnpm lint` — pass (no new warnings)
-- `pnpm typecheck` — pass
-- `pnpm test` — 32/32 tests pass (7 existing + 14 session 1 + 11 session 2)
-- `pnpm build` — pass (`/api/slack/interactions` route visible in build output)
+- [x] `/improve` slash command — implemented, deployed, E2E tested ✓
+- [x] Message shortcut (message_action) — implemented, deployed
+- [x] Shared `improveMessage()` core pipeline
+- [x] Rate limiting (sliding window on `improvement_requests`)
+- [x] Block Kit responses (slash command + shortcut variants)
+- [x] Zod validation for all payloads
+- [x] Privacy: no raw text persistence, content_hash only
+- [x] Analytics API (`/api/analytics/improvements`)
+- [x] Middleware fix for `/api/slack/*` routes
+- [x] Tests: 32/32 pass
+- [x] Typecheck, lint, build pass
+- [x] Deployed to Vercel (commits `676caf9`, `5763a25`)
 
 ---
 
-## Manual steps required
+## Unresolved issues
 
-### 1. Slash command (from Session 1)
-In Slack App dashboard (https://api.slack.com/apps):
+1. **Message shortcut Callback ID misconfigured** — User set `このメッセージの改善提案を表示します` (the description) as the Callback ID instead of `improve_message`. Vercel logs show: `[slack/interactions] unknown callback_id: このメッセージの改善提案を表示します`. **Fix:** Update Callback ID to `improve_message` in Slack App dashboard → Interactivity & Shortcuts → edit the message shortcut.
 
-- **Slash Commands** → Create `/improve`
-  - Request URL: `https://<app-url>/api/slack/commands`
-  - Short Description: `メッセージの下書きを改善します`
-  - Usage Hint: `[改善したいメッセージ]`
+2. **Message shortcut E2E not yet verified** — After fixing Callback ID, need to confirm: right-click message → shortcut → ephemeral response with original + improved text.
 
-### 2. Message shortcut (Session 2 — NEW)
-In Slack App dashboard:
-
-- **Interactivity & Shortcuts** → Enable Interactivity
-  - Request URL: `https://<app-url>/api/slack/interactions`
-- **Shortcuts** → Create New Shortcut → **On messages**
-  - Name: `メッセージを改善する`
-  - Callback ID: `improve_message`
-  - Short Description: `このメッセージの改善提案を表示します`
-
-### 3. General
-- Apply migration `00006` to production DB (if not already done)
-- Reinstall app to workspace (for `commands` scope)
+3. **Typecheck/build hang on local machine** — Known resource issue; passes in CI/Vercel deployment but hangs locally on Mac mini.
 
 ---
 
-## Risks
+## Exact next recommended prompt
 
-| Risk | Mitigation |
-|------|------------|
-| Claude latency (>5s) | Immediate ACK + async processing via `after()` |
-| Interaction 3-second timeout | Only DB lookups + rate limit run synchronously; Claude call is in `after()` |
-| Text-only guard | Messages with only attachments/files return informative error |
-| `/improve` + shortcut share rate limits | Intentional — both increment the same `improvement_requests` table |
-| Existing installs lack `commands` scope | Must reinstall app |
-
----
-
-## Next steps
-
-1. Configure Interactivity URL and message shortcut in Slack App dashboard
-2. End-to-end test: right-click message → "メッセージを改善する" → improvement response
-3. Begin Phase 2: Slack App Home Personal Coach
+```
+Slack App ダッシュボードでメッセージショートカットの Callback ID を `improve_message` に修正しました。E2E テスト完了したら Phase 2（Slack App Home Personal Coach）を始めましょう。docs/roadmap.md の Phase 2 スコープに基づいて実装プランを提案してください。
+```
